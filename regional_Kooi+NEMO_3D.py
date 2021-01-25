@@ -3,6 +3,7 @@ from parcels.kernels.TEOSseawaterdensity import PolyTEOS10_bsq
 from datetime import timedelta as delta
 from datetime import  datetime
 import numpy as np
+from numpy.random import default_rng
 import math
 from glob import glob
 import os
@@ -20,6 +21,9 @@ import scipy.linalg
 import math as math
 from argparse import ArgumentParser
 warnings.filterwarnings("ignore")
+
+seed = 123
+rng = default_rng(seed)
 
 #------ Choose ------:
 simdays = 90 #20
@@ -239,6 +243,31 @@ def Profiles(particle, fieldset, time):
     #particle.sw_visc = fieldset.SV[time,particle.depth,particle.lat,particle.lon] 
     #particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
     
+def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-7):
+    '''
+    Create a set of particle radii by randomly drawing from a continuous distribution.
+    UNFINISHED
+    '''
+    r_pls = rng.power(3, number_of_particles)
+    return r_pls
+
+def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-7):
+    '''
+    Create a set of particle radii according to the Cozar distribution.
+    :param number_of_particles: Size of particleset
+    :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
+    :param e_min: Exponent of the smallest particle. -7 -> 1E-7 = 0.1 um
+    '''
+    nbins = e_max-e_min+1
+    bins = np.logspace(e_min, e_max, nbins)
+    distribution = bins[-1]**2/(bins**2)
+    particles_per_bin = distribution/np.sum(distribution)
+    particles_per_bin = particles_per_bin.round()
+    r_pls = []
+    for i,r in enumerate(bins):
+        r_pls += [r]*particles_per_bin[i]
+    return r_pls
+
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -378,8 +407,8 @@ if __name__ == "__main__":
     depths = fieldset.U.depth
 
     #------ Kinematic viscosity and dynamic viscosity not available in MEDUSA so replicating Kooi's profiles at all grid points ------
-    with open('/home/dlobelle/Kooi_data/data_input/profiles.pickle', 'rb') as f:
-        depth,T_z,S_z,rho_z,upsilon_z,mu_z = pickle.load(f)
+#    with open('/home/dlobelle/Kooi_data/data_input/profiles.pickle', 'rb') as f:
+#        depth,T_z,S_z,rho_z,upsilon_z,mu_z = pickle.load(f)
 
 #    KV = Field('KV', np.array(upsilon_z), lon=0, lat=0, depth=depths, mesh='spherical') #np.empty(1)
 #    SV = Field('SV', np.array(mu_z), lon=0, lat=0, depth=depths, mesh='spherical')
@@ -388,9 +417,10 @@ if __name__ == "__main__":
     
     
     """ Defining the particle set """   
-    
+       
     rho_pls = [30, 30, 30, 30, 30, 840, 840, 840, 840, 840, 920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]  # add/remove here if more needed
+    r_pls = select_from_Cozar_determined(len(rho_pls)
+    #r_pls = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]  # add/remove here if more needed
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)

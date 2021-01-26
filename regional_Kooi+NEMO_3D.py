@@ -1,4 +1,4 @@
-from parcels import FieldSet, ParticleSet, JITParticle, ScipyParticle, AdvectionRK4_3D, AdvectionRK4, ErrorCode, ParticleFile, Variable, Field, NestedField, VectorField, timer 
+from parcels import FieldSet, ParticleSet, JITParticle, ScipyParticle, AdvectionRK4_3D, AdvectionRK4, ErrorCode, ParticleFile, Variable, Field, NestedField, VectorField, timer, ParcelsRandom 
 from parcels.kernels.TEOSseawaterdensity import PolyTEOS10_bsq
 from datetime import timedelta as delta
 from datetime import  datetime
@@ -23,6 +23,7 @@ from argparse import ArgumentParser
 warnings.filterwarnings("ignore")
 
 seed = 123
+ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
@@ -268,6 +269,12 @@ def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-7):
         r_pls += [r]*particles_per_bin[i]
     return r_pls
 
+def vertical_mixing_random_constant(particle, fieldset, time):
+    if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
+        vmax = 0.2                                 # [m/s] Maximum velocity
+        w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
+        particle.depth += w_m*particle.dt
+  
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -368,7 +375,8 @@ if __name__ == "__main__":
                  'nd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
                  'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
                  'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
+                 'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
+                 'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
 
     variables = {'U': 'uo',
                  'V': 'vo',
@@ -377,7 +385,8 @@ if __name__ == "__main__":
                  'nd_phy': 'PHN',
                  'tpp3': 'TPP3', # units: mmolN/m3/d 
                  'cons_temperature': 'potemp',
-                 'abs_salinity': 'salin'}
+                 'abs_salinity': 'salin',
+                 'mldr': 'mldr10_1'}
 
     dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}, #time_centered
                   'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
@@ -386,7 +395,8 @@ if __name__ == "__main__":
                   'nd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
                   'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'}}
+                  'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
+                  'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'}}
     
     initialgrid_mask = dirread+'ORCA0083-N06_20070105d05U.nc'
     mask = xr.open_dataset(initialgrid_mask, decode_times=False)
@@ -419,7 +429,7 @@ if __name__ == "__main__":
     """ Defining the particle set """   
        
     rho_pls = [30, 30, 30, 30, 30, 840, 840, 840, 840, 840, 920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = select_from_Cozar_determined(len(rho_pls)
+    r_pls = select_from_Cozar_determined(len(rho_pls))
     #r_pls = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]  # add/remove here if more needed
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
@@ -457,16 +467,16 @@ if __name__ == "__main__":
         s = 'SON'
     
     if no_biofouling == 'True':
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi_no_biofouling)
+        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi_no_biofouling)
         proc = 'nobf'
     elif no_advection == 'True':
-        kernels = pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
+        kernels = pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
         proc = 'noadv'
     else:
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
+        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
         proc = 'bfadv'
 
-    outfile = '/home/dlobelle/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+    outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
 

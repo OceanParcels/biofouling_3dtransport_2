@@ -27,7 +27,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 90 #20
+simdays = 20 #90
 secsdt = 30 #60 
 hrsoutdt = 12 #2
 
@@ -78,7 +78,7 @@ def Kooi(particle,fieldset,time):
     k = 1.0306E-13/(86400.**2.) # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
     rho_bf = 1388.              # density of biofilm ([g m-3]
     v_a = 2.0E-16               # Volume of 1 algal cell [m-3]
-    m_a = 0.39/86400.           # mortality rate, now [s-1]
+    m_a = fieldset.mortality_rate/86400. # mortality rate, now [s-1]
     r20 = 0.1/86400.            # respiration rate, now [s-1] 
     q10 = 2.                    # temperature coefficient respiration [-]
     gamma = 1.728E5/86400.      # shear [d-1], now [s-1]
@@ -244,7 +244,7 @@ def Profiles(particle, fieldset, time):
     #particle.sw_visc = fieldset.SV[time,particle.depth,particle.lat,particle.lon] 
     #particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
     
-def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-7):
+def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-6):
     '''
     Create a set of particle radii by randomly drawing from a continuous distribution.
     UNFINISHED
@@ -252,18 +252,18 @@ def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-7)
     r_pls = rng.power(3, number_of_particles)
     return r_pls
 
-def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-7):
+def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     '''
     Create a set of particle radii according to the Cozar distribution.
     :param number_of_particles: Size of particleset
     :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
-    :param e_min: Exponent of the smallest particle. -7 -> 1E-7 = 0.1 um
+    :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
     '''
     nbins = e_max-e_min+1
     bins = np.logspace(e_min, e_max, nbins)
     distribution = bins[-1]**2/(bins**2)
     particles_per_bin = distribution/np.sum(distribution)
-    particles_per_bin = particles_per_bin.round()
+    particles_per_bin = particles_per_bin.round().astype(int)
     r_pls = []
     for i,r in enumerate(bins):
         r_pls += [r]*particles_per_bin[i]
@@ -273,8 +273,21 @@ def vertical_mixing_random_constant(particle, fieldset, time):
     if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
         vmax = 0.2                                 # [m/s] Maximum velocity
         w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
-        particle.depth += w_m*particle.dt
+        z_0 = particle.depth + w_m*particle.dt
+        if z_0 <= 0.6:                              # [m] NEMO's surface depth
+            particle.depth = 0.6
+        else:
+            particle.depth = z_0
   
+
+def markov_0_reflect(particle, fieldset, time):
+    """
+    If a particle tries to cross the boundary, then it is reflected back
+    Author: Victor Onink
+    Adapted 1D -> 3D
+    """
+    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -299,21 +312,26 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     
 if __name__ == "__main__":     
     p = ArgumentParser(description="""choose starting month and year""")
-    p.add_argument('-mon', choices = ('12','03','06','09'), action="store", dest="mon", 
+    p.add_argument('-mon', choices = ('01','12','03','06','09'), action="store", dest="mon", 
                    help='start month for the run')
     p.add_argument('-yr', choices = ('2000','2001','2002','2003','2004','2005','2006','2007','2008','2009','2010'), action="store", dest="yr",
                    help='start year for the run')
     p.add_argument('-region', choices = ('GPGP','EqPac'), action = "store", dest = "region",
                    help ='region where particles released')
-    p.add_argument('-no_biofouling', choices =('True','False'), action="store", dest="no_biofouling", help='True if using Kooi kernel without biofouling')   
-    p.add_argument('-no_advection', choices =('True','False'), action="store", dest="no_advection", help='True if removing advection_RK43D kernel')
+    p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
+    p.add_argument('-mixing', choices = ('no', 'fixed'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
+    p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     
+
     args = p.parse_args()
     mon = args.mon
     yr = args.yr
     region = args.region
-    no_biofouling = args.no_biofouling
-    no_advection = args.no_advection
+    mortality_rate = float(args.mortality_rate)
+    mixing = args.mixing
+    no_biofouling = False #no_biofouling = args.no_biofouling
+    no_advection = False #no_advection = args.no_advection
+    system = args.system
     
     """ Load particle release locations from plot_NEMO_landmask.ipynb """
     # CHOOSE
@@ -333,21 +351,27 @@ if __name__ == "__main__":
 
     #------ Release particles on a 10x10 deg grid ------
     if region == 'GPGP':
-        lat_release0 = np.tile(np.linspace(28,36,5),[5,1]) #(20,28,5),[5,1]) 
+        lat_release0 = np.tile(np.linspace(28,36,50),[50,1]) #(20,28,5),[5,1]) 
         lat_release = lat_release0.T 
-        lon_release = np.tile(np.linspace(-135,-143,5),[5,1]) #(-140,-148,5),[5,1]) 
+        lon_release = np.tile(np.linspace(-135,-143,50),[50,1]) #(-140,-148,5),[5,1]) 
     elif region == 'EqPac':
-        lat_release0 = np.tile(np.linspace(-4,4,5),[5,1]) 
-        lon_release = np.tile(np.linspace(-140,-148,5),[5,1])
+        lat_release0 = np.tile(np.linspace(-4,4,50),[50,1]) 
+        lon_release = np.tile(np.linspace(-140,-148,50),[50,1])
         lat_release = lat_release0.T 
-    z_release = np.tile(0.6,[5,5]) 
-    res = '2x2'  
+    z_release = np.tile(0.6,[50,50]) 
+    res = '0.2x0.2' 
     
     """ Defining the fieldset""" 
-
-    dirread = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA/ORCA0083-N006/means/'
-    dirread_bgc = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'  
-    dirread_mesh = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA/ORCA0083-N006/domain/'  
+    if system == 'cartesius':
+        dirread = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA/ORCA0083-N006/means/'
+        dirread_bgc = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'  
+        dirread_mesh = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA/ORCA0083-N006/domain/'
+    elif system == 'gemini':
+        dirread = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/means/'
+        dirread_bgc = '/data/oceanparcels/input_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'
+        dirread_mesh = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/domain/'
+    else:
+        print('Error: no valid system argument parsed')  
 
     if mon =='12':
         yr0 = str(int(yr)-1)
@@ -357,6 +381,14 @@ if __name__ == "__main__":
         pfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05P.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05P.nc')))
         ppfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05D.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05D.nc')))
         tsfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr0+'1*d05T.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc')))
+    elif mon == '01':
+        yr0 = yr
+        ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05U.nc'))
+        vfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05V.nc'))
+        wfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05W.nc'))
+        pfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05P.nc'))
+        ppfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05D.nc'))
+        tsfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05T.nc'))
     else:
         yr0 = yr
         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05U.nc')) 
@@ -406,37 +438,36 @@ if __name__ == "__main__":
     iy_min, ix_min = getclosest_ij(latvals, lonvals, minlat-5, minlon)
     iy_max, ix_max = getclosest_ij(latvals, lonvals, maxlat+5, maxlon)
 
-    indices = {'lat': range(iy_min, iy_max)}  # 'depth': range(0, 2000) 'lon': range(ix_min, ix_max), 
+    indices = {'lat': range(iy_min, iy_max), 'lon': range(ix_min, ix_max)} #depth : range(0,2000)
+    print(indices['lat']) 
 
-    chs = {'time_counter': 1, 'depthu': 25, 'depthv': 25, 'depthw': 25, 'deptht': 25, 'y': 200, 'x': 200} #'deptht': 75, 'y': 100, 'x': 100
+    chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}}
         
-    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, field_chunksize=chs, indices = indices) 
+    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices) 
+    fieldset.add_constant('mortality_rate', mortality_rate)
 
     lons = fieldset.U.lon
     lats = fieldset.U.lat
     depths = fieldset.U.depth
 
-    #------ Kinematic viscosity and dynamic viscosity not available in MEDUSA so replicating Kooi's profiles at all grid points ------
-#    with open('/home/dlobelle/Kooi_data/data_input/profiles.pickle', 'rb') as f:
-#        depth,T_z,S_z,rho_z,upsilon_z,mu_z = pickle.load(f)
-
-#    KV = Field('KV', np.array(upsilon_z), lon=0, lat=0, depth=depths, mesh='spherical') #np.empty(1)
-#    SV = Field('SV', np.array(mu_z), lon=0, lat=0, depth=depths, mesh='spherical')
-#    fieldset.add_field(KV, 'KV')
-#    fieldset.add_field(SV, 'SV')
-    
-    
     """ Defining the particle set """   
        
     rho_pls = [30, 30, 30, 30, 30, 840, 840, 840, 840, 840, 920, 920, 920, 920, 920]  # add/remove here if more needed
     r_pls = select_from_Cozar_determined(len(rho_pls))
-    #r_pls = [1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]  # add/remove here if more needed
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
                                  lon= lon_release, #-160.,  # a vector of release longitudes 
                                  lat= lat_release, #36., 
-                                 time = np.datetime64('%s-%s-01' % (yr0, mon)),
+                                 time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
                                  r_pl = r_pls[0] * np.ones(np.array(lon_release).size),
                                  rho_pl = rho_pls[0] * np.ones(np.array(lon_release).size),
@@ -465,18 +496,19 @@ if __name__ == "__main__":
         s = 'JJA'
     elif mon=='09':
         s = 'SON'
+    elif mon=='01':
+        s = 'Jan'
     
-    if no_biofouling == 'True':
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi_no_biofouling)
-        proc = 'nobf'
-    elif no_advection == 'True':
-        kernels = pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
-        proc = 'noadv'
-    else:
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(vertical_mixing_random_constant) + pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi)
-        proc = 'bfadv'
+    kernels = pset.Kernel(AdvectionRK4_3D) 
+    if mixing == 'fixed':
+        kernels += pset.Kernel(vertical_mixing_random_constant)
+    kernels += pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi) 
+    proc = 'bfadv'
 
-    outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+    if system == 'cartesius':
+        outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+    elif system == 'gemini':
+         outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
 

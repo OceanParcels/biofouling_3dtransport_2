@@ -10,4 +10,4 @@
 
 echo 'Start Simulation'
 cd ${HOME}/biofouling_3dtransport_2/Simulation/
-python3 regional_Kooi+NEMO_3D.py -mon=01 -yr=2004 -region='EqPac' -a_mort='0.16' -mixing='fixed' -system='gemini'
+python3 regional_Kooi+NEMO_3D.py -mon=01 -yr=2004 -region='EqPac' -a_mort='0.5' -mixing='no' -system='gemini'

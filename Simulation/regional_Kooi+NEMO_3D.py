@@ -28,7 +28,7 @@ rng = default_rng(seed)
 
 #------ Choose ------:
 simdays = 20 #90
-secsdt = 30 #60 
+secsdt = 60 #30
 hrsoutdt = 12 #2
 
 """functions and kernels"""
@@ -43,8 +43,8 @@ def Kooi(particle,fieldset,time):
     max_N2cell = 11.0e-09   #[mgN cell-1] 
     med_N2cell = 356.04e-09 #[mgN cell-1] median value is used below (as done in Kooi et al. 2017)
       
-    #------ Ambient algal concentration from MEDUSA's non-diatom + diatom phytoplankton 
-    n0 = particle.nd_phy+particle.d_phy # [mmol N m-3] in MEDUSA
+    #------ Ambient algal concentration from MEDUSA's diatom phytoplankton 
+    n0 = particle.d_phy # [mmol N m-3] in MEDUSA
     n = n0*14.007                       # conversion from [mmol N m-3] to [mg N m-3] (atomic weight of 1 mol of N = 14.007 g)   
     n2 = n/med_N2cell                   # conversion from [mg N m-3] to [no. m-3]
     
@@ -106,7 +106,7 @@ def Kooi(particle,fieldset,time):
     beta_a = beta_abrown + beta_ashear + beta_aset            # collision rate [m3 s-1]
     
     #------ Attached algal growth (Eq. 11 in Kooi et al. 2017) -----
-    a_coll = (beta_a*aa)/theta_pl
+    a_coll = (beta_a*aa)/theta_pl*fieldset.collision_eff
     a_growth = mu_aa*a
     a_mort = m_a*a
     a_resp = (q10**((t-20.)/10.))*r20*a     
@@ -230,8 +230,7 @@ def periodicBC(particle, fieldset, time):
            
 def Profiles(particle, fieldset, time):  
     particle.temp = fieldset.cons_temperature[time, particle.depth,particle.lat,particle.lon]  
-    particle.d_phy= fieldset.d_phy[time, particle.depth,particle.lat,particle.lon]  
-    particle.nd_phy= fieldset.nd_phy[time, particle.depth,particle.lat,particle.lon] 
+    particle.d_phy= fieldset.d_phy[time, particle.depth,particle.lat,particle.lon] 
     particle.tpp3 = fieldset.tpp3[time,particle.depth,particle.lat,particle.lon]
     
     mu_w = 4.2844E-5 + (1/((0.157*(particle.temp + 64.993)**2)-91.296))
@@ -240,9 +239,7 @@ def Profiles(particle, fieldset, time):
     S_sw = fieldset.abs_salinity[time, particle.depth, particle.lat, particle.lon]
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
-    #particle.kin_visc = fieldset.KV[time,particle.depth,particle.lat,particle.lon] 
-    #particle.sw_visc = fieldset.SV[time,particle.depth,particle.lat,particle.lon] 
-    #particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
     
 def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-6):
     '''
@@ -271,14 +268,23 @@ def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
 
 def vertical_mixing_random_constant(particle, fieldset, time):
     if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
+        particle.mld = 1                           # Particle is in mixed layer
         vmax = 0.2                                 # [m/s] Maximum velocity
-        w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
-        z_0 = particle.depth + w_m*particle.dt
+        particle.w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
+        z_0 = particle.depth + particle.w_m*particle.dt
         if z_0 <= 0.6:                              # [m] NEMO's surface depth
             particle.depth = 0.6
         else:
             particle.depth = z_0
-  
+    else:
+        particle.mld = 0
+        particle.w_m = 0
+
+def mixed_layer(particle, fieldset, time):
+    if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
+        particle.mld = 1
+    else:
+        particle.mld = 0
 
 def markov_0_reflect(particle, fieldset, time):
     """
@@ -298,11 +304,12 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     density = Variable('density',dtype=np.float32,to_write=True)
     tpp3 = Variable('tpp3',dtype=np.float32,to_write=False)
     d_phy = Variable('d_phy',dtype=np.float32,to_write=False)
-    nd_phy = Variable('nd_phy',dtype=np.float32,to_write=False)
-    a = Variable('a',dtype=np.float32,to_write=False)
+    a = Variable('a',dtype=np.float32,to_write=True)
     kin_visc = Variable('kin_visc',dtype=np.float32,to_write=False)
     sw_visc = Variable('sw_visc',dtype=np.float32,to_write=False)
-    vs = Variable('vs',dtype=np.float32,to_write=True) 
+    vs = Variable('vs',dtype=np.float32,to_write=True)
+    w_m = Variable('w_m', dtype=np.float32, to_write=True)
+    mld = Variable('mld', dtype=np.float32, to_write=True) 
     rho_tot = Variable('rho_tot',dtype=np.float32,to_write=True) 
     r_tot = Variable('r_tot',dtype=np.float32,to_write=True)
     delta_rho = Variable('delta_rho',dtype=np.float32,to_write=True)
@@ -320,6 +327,7 @@ if __name__ == "__main__":
                    help ='region where particles released')
     p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
     p.add_argument('-mixing', choices = ('no', 'fixed'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
+    p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     
 
@@ -329,6 +337,7 @@ if __name__ == "__main__":
     region = args.region
     mortality_rate = float(args.mortality_rate)
     mixing = args.mixing
+    collision_eff = float(args.collision_eff)
     no_biofouling = False #no_biofouling = args.no_biofouling
     no_advection = False #no_advection = args.no_advection
     system = args.system
@@ -404,7 +413,6 @@ if __name__ == "__main__":
                  'V': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': vfiles},
                  'W': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': wfiles},
                  'd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'nd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
                  'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
                  'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
                  'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
@@ -414,7 +422,6 @@ if __name__ == "__main__":
                  'V': 'vo',
                  'W': 'wo',
                  'd_phy': 'PHD',
-                 'nd_phy': 'PHN',
                  'tpp3': 'TPP3', # units: mmolN/m3/d 
                  'cons_temperature': 'potemp',
                  'abs_salinity': 'salin',
@@ -424,7 +431,6 @@ if __name__ == "__main__":
                   'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
                   'W': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
                   'd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'nd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
                   'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
@@ -445,7 +451,6 @@ if __name__ == "__main__":
            'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
@@ -453,6 +458,7 @@ if __name__ == "__main__":
         
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices) 
     fieldset.add_constant('mortality_rate', mortality_rate)
+    fieldset.add_constant('collision_eff', collision_eff)
 
     lons = fieldset.U.lon
     lats = fieldset.U.lat
@@ -460,8 +466,8 @@ if __name__ == "__main__":
 
     """ Defining the particle set """   
        
-    rho_pls = [30, 30, 30, 30, 30, 840, 840, 840, 840, 840, 920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = select_from_Cozar_determined(len(rho_pls))
+    rho_pls = [920, 920, 920, 920, 920]  # add/remove here if more needed
+    r_pls = [0.5e-3, 1e-4, 1e-5, 1e-6]
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
@@ -479,7 +485,7 @@ if __name__ == "__main__":
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
                                  lon= lon_release, #-160.,  # a vector of release longitudes 
                                  lat= lat_release, #36., 
-                                 time = np.datetime64('%s-%s-01' % (yr0, mon)),
+                                 time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
                                  r_pl = r_pl * np.ones(np.array(lon_release).size),
                                  rho_pl = rho_pl * np.ones(np.array(lon_release).size),
@@ -502,6 +508,8 @@ if __name__ == "__main__":
     kernels = pset.Kernel(AdvectionRK4_3D) 
     if mixing == 'fixed':
         kernels += pset.Kernel(vertical_mixing_random_constant)
+    else:
+        kernels += pset.Kernel(mixed_layer)
     kernels += pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi) 
     proc = 'bfadv'
 

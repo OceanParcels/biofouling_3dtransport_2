@@ -28,8 +28,8 @@ rng = default_rng(seed)
 
 #------ Choose ------:
 simdays = 20 #90
-secsdt = 60 #30
-hrsoutdt = 12 #2
+secsdt = 5*60 #30
+hrsoutdt = 6 #2
 
 """functions and kernels"""
 
@@ -111,6 +111,9 @@ def Kooi(particle,fieldset,time):
     a_mort = m_a*a
     a_resp = (q10**((t-20.)/10.))*r20*a     
     
+    particle.a_coll = a_coll
+    particle.a_growth = a_growth
+    particle.a_resp = a_resp
     particle.a += (a_coll + a_growth - a_mort - a_resp) * particle.dt
 
     dn = 2. * (r_tot)                             # equivalent spherical diameter [m]
@@ -241,12 +244,15 @@ def Profiles(particle, fieldset, time):
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
     
-def select_from_Cozar_random_continuous(number_of_particles, e_max=-3, e_min=-6):
+def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
     '''
-    Create a set of particle radii by randomly drawing from a continuous distribution.
-    UNFINISHED
+    Create a set of particle radii by randomly drawing between given binedges from a power law distribution with given exponent.
     '''
-    r_pls = rng.power(3, number_of_particles)
+    r_pls = np.zeros((len(bins)-1,n_particles_per_bin))
+    for i in range(len(bins)-1):
+        rnd = rng.random(n_particles_per_bin) #random number between 0 and 1
+        rmin, rmax = bins[i]**exponent, bins[i+1]**exponent
+        r_pls[i] = (rmin + (rmax - rmin)*rnd)**(1./exponent)
     return r_pls
 
 def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
@@ -267,9 +273,9 @@ def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     return r_pls
 
 def vertical_mixing_random_constant(particle, fieldset, time):
-    if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
-        particle.mld = 1                           # Particle is in mixed layer
-        vmax = 0.2                                 # [m/s] Maximum velocity
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    if particle.mld < 1:
+        vmax = 0.02                                # [m/s] Maximum velocity
         particle.w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
         z_0 = particle.depth + particle.w_m*particle.dt
         if z_0 <= 0.6:                              # [m] NEMO's surface depth
@@ -277,14 +283,10 @@ def vertical_mixing_random_constant(particle, fieldset, time):
         else:
             particle.depth = z_0
     else:
-        particle.mld = 0
         particle.w_m = 0
 
 def mixed_layer(particle, fieldset, time):
-    if particle.depth < fieldset.mldr[time, particle.depth, particle.lat, particle.lon]:
-        particle.mld = 1
-    else:
-        particle.mld = 0
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
 
 def markov_0_reflect(particle, fieldset, time):
     """
@@ -305,6 +307,9 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     tpp3 = Variable('tpp3',dtype=np.float32,to_write=False)
     d_phy = Variable('d_phy',dtype=np.float32,to_write=False)
     a = Variable('a',dtype=np.float32,to_write=True)
+    a_coll = Variable('a_coll', dtype=np.float32, to_write=True)
+    a_growth = Variable('a_growth', dtype=np.float32, to_write=True)
+    a_resp = Variable('a_resp', dtype=np.float32, to_write=True)
     kin_visc = Variable('kin_visc',dtype=np.float32,to_write=False)
     sw_visc = Variable('sw_visc',dtype=np.float32,to_write=False)
     vs = Variable('vs',dtype=np.float32,to_write=True)
@@ -323,8 +328,7 @@ if __name__ == "__main__":
                    help='start month for the run')
     p.add_argument('-yr', choices = ('2000','2001','2002','2003','2004','2005','2006','2007','2008','2009','2010'), action="store", dest="yr",
                    help='start year for the run')
-    p.add_argument('-region', choices = ('GPGP','EqPac'), action = "store", dest = "region",
-                   help ='region where particles released')
+    p.add_argument('-region', choices = ('GPGP','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
     p.add_argument('-mixing', choices = ('no', 'fixed'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
@@ -356,7 +360,11 @@ if __name__ == "__main__":
         maxlat = 20
         minlon = -180
         maxlon = -120
-
+    elif region == 'SO':
+        minlat = -75
+        maxlat = -35
+        minlon = -15
+        maxlon = 25
 
     #------ Release particles on a 10x10 deg grid ------
     if region == 'GPGP':
@@ -366,7 +374,11 @@ if __name__ == "__main__":
     elif region == 'EqPac':
         lat_release0 = np.tile(np.linspace(-4,4,50),[50,1]) 
         lon_release = np.tile(np.linspace(-140,-148,50),[50,1])
-        lat_release = lat_release0.T 
+        lat_release = lat_release0.T
+    elif region == 'SO':
+        lat_release0  = np.tile(np.linspace(-55,-45,50),[50,1])
+        lon_release = np.tile(np.linspace(-10,0,50),[50,1])
+        lat_release = lat_release0.T
     z_release = np.tile(0.6,[50,50]) 
     res = '0.2x0.2' 
     
@@ -467,7 +479,7 @@ if __name__ == "__main__":
     """ Defining the particle set """   
        
     rho_pls = [920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = [0.5e-3, 1e-4, 1e-5, 1e-6]
+    r_pls = select_from_Cozar_random_continuous(lon_release.size,[1e-3, 0.5e-3, 1e-4, 1e-5, 1e-6],-3)
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
@@ -475,9 +487,9 @@ if __name__ == "__main__":
                                  lat= lat_release, #36., 
                                  time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
-                                 r_pl = r_pls[0] * np.ones(np.array(lon_release).size),
+                                 r_pl = r_pls[0],
                                  rho_pl = rho_pls[0] * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pls[0] * np.ones(np.array(lon_release).size),
+                                 r_tot = r_pls[0],
                                  rho_tot = rho_pls[0] * np.ones(np.array(lon_release).size))
 
     for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
@@ -487,9 +499,9 @@ if __name__ == "__main__":
                                  lat= lat_release, #36., 
                                  time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
-                                 r_pl = r_pl * np.ones(np.array(lon_release).size),
+                                 r_pl = r_pl,
                                  rho_pl = rho_pl * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pl * np.ones(np.array(lon_release).size),
+                                 r_tot = r_pl,
                                  rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
 
 

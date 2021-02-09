@@ -28,8 +28,8 @@ rng = default_rng(seed)
 
 #------ Choose ------:
 simdays = 20 #90
-secsdt = 5*60 #30
-hrsoutdt = 6 #2
+secsdt = 60 #30
+hrsoutdt = 12 #2
 
 """functions and kernels"""
 
@@ -70,7 +70,7 @@ def Kooi(particle,fieldset,time):
     sw_visc = particle.sw_visc   # [kg m-1 s-1]
     kin_visc = particle.kin_visc # [m2 s-1]
     rho_sw = particle.density    # [kg m-3]       
-    a = particle.a               # [no. m-2 s-1]
+    a = particle.a               # [no. m-2]
     vs = particle.vs             # [m s-1]   
 
     #------ Constants and algal properties -----
@@ -106,7 +106,7 @@ def Kooi(particle,fieldset,time):
     beta_a = beta_abrown + beta_ashear + beta_aset            # collision rate [m3 s-1]
     
     #------ Attached algal growth (Eq. 11 in Kooi et al. 2017) -----
-    a_coll = (beta_a*aa)/theta_pl*fieldset.collision_eff
+    a_coll = (beta_a*aa)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1]
     a_growth = mu_aa*a
     a_mort = m_a*a
     a_resp = (q10**((t-20.)/10.))*r20*a     
@@ -239,11 +239,11 @@ def Profiles(particle, fieldset, time):
     mu_w = 4.2844E-5 + (1/((0.157*(particle.temp + 64.993)**2)-91.296))
     A = 1.541 + 1.998E-2*particle.temp - 9.52E-5*particle.temp**2
     B = 7.974 - 7.561E-2*particle.temp + 4.724E-4*particle.temp**2
-    S_sw = fieldset.abs_salinity[time, particle.depth, particle.lat, particle.lon]
+    S_sw = fieldset.abs_salinity[time, particle.depth, particle.lat, particle.lon]/1000
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
-    
+
 def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
     '''
     Create a set of particle radii by randomly drawing between given binedges from a power law distribution with given exponent.
@@ -304,14 +304,14 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     w = Variable('w', dtype=np.float32,to_write=True)
     temp = Variable('temp',dtype=np.float32,to_write=False)
     density = Variable('density',dtype=np.float32,to_write=True)
-    tpp3 = Variable('tpp3',dtype=np.float32,to_write=False)
-    d_phy = Variable('d_phy',dtype=np.float32,to_write=False)
+    tpp3 = Variable('tpp3',dtype=np.float32,to_write=True)
+    d_phy = Variable('d_phy',dtype=np.float32,to_write=True)
     a = Variable('a',dtype=np.float32,to_write=True)
     a_coll = Variable('a_coll', dtype=np.float32, to_write=True)
     a_growth = Variable('a_growth', dtype=np.float32, to_write=True)
     a_resp = Variable('a_resp', dtype=np.float32, to_write=True)
-    kin_visc = Variable('kin_visc',dtype=np.float32,to_write=False)
-    sw_visc = Variable('sw_visc',dtype=np.float32,to_write=False)
+    kin_visc = Variable('kin_visc',dtype=np.float32,to_write=True)
+    sw_visc = Variable('sw_visc',dtype=np.float32,to_write=True)
     vs = Variable('vs',dtype=np.float32,to_write=True)
     w_m = Variable('w_m', dtype=np.float32, to_write=True)
     mld = Variable('mld', dtype=np.float32, to_write=True) 
@@ -328,7 +328,7 @@ if __name__ == "__main__":
                    help='start month for the run')
     p.add_argument('-yr', choices = ('2000','2001','2002','2003','2004','2005','2006','2007','2008','2009','2010'), action="store", dest="yr",
                    help='start year for the run')
-    p.add_argument('-region', choices = ('GPGP','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
+    p.add_argument('-region', choices = ('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
     p.add_argument('-mixing', choices = ('no', 'fixed'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     # CHOOSE
 
     #------ Fieldset grid  ------
-    if region == 'GPGP':
+    if region == 'NPSG':
         minlat = 20 
         maxlat = 45 
         minlon = 110 # -180 #75 
@@ -362,12 +362,12 @@ if __name__ == "__main__":
         maxlon = -120
     elif region == 'SO':
         minlat = -75
-        maxlat = -35
+        maxlat = -45
         minlon = -15
         maxlon = 25
 
     #------ Release particles on a 10x10 deg grid ------
-    if region == 'GPGP':
+    if region == 'NPSG':
         lat_release0 = np.tile(np.linspace(28,36,50),[50,1]) #(20,28,5),[5,1]) 
         lat_release = lat_release0.T 
         lon_release = np.tile(np.linspace(-135,-143,50),[50,1]) #(-140,-148,5),[5,1]) 
@@ -376,7 +376,7 @@ if __name__ == "__main__":
         lon_release = np.tile(np.linspace(-140,-148,50),[50,1])
         lat_release = lat_release0.T
     elif region == 'SO':
-        lat_release0  = np.tile(np.linspace(-55,-45,50),[50,1])
+        lat_release0  = np.tile(np.linspace(-65,-55,50),[50,1])
         lon_release = np.tile(np.linspace(-10,0,50),[50,1])
         lat_release = lat_release0.T
     z_release = np.tile(0.6,[50,50]) 
@@ -531,6 +531,8 @@ if __name__ == "__main__":
          outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
+    pfile.add_metadata('collision efficiency', str(collision_eff))
+    pfile.add_metadata('mortality rate', str(mortality_rate))
 
     pset.execute(kernels, runtime=delta(days=simdays), dt=delta(seconds = secsdt), output_file=pfile, verbose_progress=True, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle, ErrorCode.ErrorInterpolation: DeleteParticle})
 

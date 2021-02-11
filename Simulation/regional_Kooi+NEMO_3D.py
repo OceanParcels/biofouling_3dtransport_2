@@ -43,16 +43,22 @@ def Kooi(particle,fieldset,time):
     max_N2cell = 11.0e-09   #[mgN cell-1] 
     med_N2cell = 356.04e-09 #[mgN cell-1] median value is used below (as done in Kooi et al. 2017)
       
-    #------ Ambient algal concentration from MEDUSA's diatom phytoplankton 
-    n0 = particle.d_phy # [mmol N m-3] in MEDUSA
-    n = n0*14.007                       # conversion from [mmol N m-3] to [mg N m-3] (atomic weight of 1 mol of N = 14.007 g)   
-    n2 = n/med_N2cell                   # conversion from [mg N m-3] to [no. m-3]
+    #------ Ambient algal concentration from MEDUSA's non-diatom + diatom phytoplankton 
+    n0 = particle.nd_phy+particle.d_phy # [mmol N m-3] in MEDUSA
+    d0 = particle.d_phy
     
+    n = n0*14.007                       # conversion from [mmol N m-3] to [mg N m-3] (atomic weight of 1 mol of N = 14.007 g)   
+    d = d0*14.007
+
+    n2 = n/med_N2cell                   # conversion from [mg N m-3] to [no. m-3]
+    d2 = d/med_N2cell
+
     if n2<0.: 
         aa = 0.
     else:
         aa = n2                        # [no m-3] to compare to Kooi model    
-    
+    ad = d2                            # [no m-3] ambient diatoms
+
     #------ Primary productivity (algal growth) from MEDUSA TPP3 (no longer condition of only above euphotic zone, since not much diff in results)
     tpp0 = particle.tpp3              # [mmol N m-3 d-1]
     mu_n0 = tpp0*14.007               # conversion from [mmol N m-3 d-1] to [mg N m-3 d-1] (atomic weight of 1 mol of N = 14.007 g) 
@@ -61,6 +67,8 @@ def Kooi(particle,fieldset,time):
     
     if mu_n2<0.:
         mu_aa = 0.
+    elif mu_n2>1.85:
+        mu_aa = 1.85/86400.           # maximum growth rate
     else:
         mu_aa = mu_n2/86400.          # conversion from d-1 to s-1
     
@@ -106,10 +114,10 @@ def Kooi(particle,fieldset,time):
     beta_a = beta_abrown + beta_ashear + beta_aset            # collision rate [m3 s-1]
     
     #------ Attached algal growth (Eq. 11 in Kooi et al. 2017) -----
-    a_coll = (beta_a*aa)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1]
+    a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
     a_growth = mu_aa*a
     a_mort = m_a*a
-    a_resp = (q10**((t-20.)/10.))*r20*a     
+    a_resp = (q10**((t-20.)/10.))*r20*a
     
     particle.a_coll = a_coll
     particle.a_growth = a_growth
@@ -233,7 +241,8 @@ def periodicBC(particle, fieldset, time):
            
 def Profiles(particle, fieldset, time):  
     particle.temp = fieldset.cons_temperature[time, particle.depth,particle.lat,particle.lon]  
-    particle.d_phy= fieldset.d_phy[time, particle.depth,particle.lat,particle.lon] 
+    particle.d_phy= fieldset.d_phy[time, particle.depth,particle.lat,particle.lon]
+    particle.nd_phy = fieldset.nd_phy[time, particle.depth,particle.lat,particle.lon]
     particle.tpp3 = fieldset.tpp3[time,particle.depth,particle.lat,particle.lon]
     
     mu_w = 4.2844E-5 + (1/((0.157*(particle.temp + 64.993)**2)-91.296))
@@ -242,7 +251,7 @@ def Profiles(particle, fieldset, time):
     S_sw = fieldset.abs_salinity[time, particle.depth, particle.lat, particle.lon]/1000
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
-    particle.w = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
 
 def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
     '''
@@ -302,10 +311,12 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     u = Variable('u', dtype=np.float32,to_write=True)
     v = Variable('v', dtype=np.float32,to_write=True)
     w = Variable('w', dtype=np.float32,to_write=True)
+    w_adv = Variable('w_adv', dtype=np.float32,to_write=True)
     temp = Variable('temp',dtype=np.float32,to_write=False)
     density = Variable('density',dtype=np.float32,to_write=True)
     tpp3 = Variable('tpp3',dtype=np.float32,to_write=True)
     d_phy = Variable('d_phy',dtype=np.float32,to_write=True)
+    nd_phy = Variable('nd_phy',dtype=np.float32,to_write=True)
     a = Variable('a',dtype=np.float32,to_write=True)
     a_coll = Variable('a_coll', dtype=np.float32, to_write=True)
     a_growth = Variable('a_growth', dtype=np.float32, to_write=True)
@@ -425,6 +436,7 @@ if __name__ == "__main__":
                  'V': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': vfiles},
                  'W': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': wfiles},
                  'd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
+                 'nd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
                  'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
                  'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
                  'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
@@ -434,6 +446,7 @@ if __name__ == "__main__":
                  'V': 'vo',
                  'W': 'wo',
                  'd_phy': 'PHD',
+                 'nd_phy': 'PHN',
                  'tpp3': 'TPP3', # units: mmolN/m3/d 
                  'cons_temperature': 'potemp',
                  'abs_salinity': 'salin',
@@ -443,6 +456,7 @@ if __name__ == "__main__":
                   'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
                   'W': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
                   'd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
+                  'nd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
                   'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
@@ -463,6 +477,7 @@ if __name__ == "__main__":
            'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
@@ -475,6 +490,15 @@ if __name__ == "__main__":
     lons = fieldset.U.lon
     lats = fieldset.U.lat
     depths = fieldset.U.depth
+
+    #------ Kinematic viscosity and dynamic viscosity not available in MEDUSA so replicating Kooi's profiles at all grid points ------
+    with open('/scratch/rfischer/Kooi_data/data_input/profiles.pickle', 'rb') as f:
+        depth,T_z,S_z,rho_z,upsilon_z,mu_z = pickle.load(f)
+
+    KV = Field('KV', np.array(upsilon_z), lon=0, lat=0, depth=depths, mesh='spherical') #np.empty(1)
+    SV = Field('SV', np.array(mu_z), lon=0, lat=0, depth=depths, mesh='spherical')
+    fieldset.add_field(KV, 'KV')
+    fieldset.add_field(SV, 'SV')
 
     """ Defining the particle set """   
        

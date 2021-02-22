@@ -319,8 +319,7 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     else:
         dK_z_p = 0
     
-    KPP = alpha * (particle.depth+z0) * math.pow(1 - particle.depth / mld, 2)
-    #KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
+    KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
     if particle.mld<1:
         K_z = KPP + fieldset.bulk_diff
     else:
@@ -340,7 +339,53 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     # The ocean surface acts as a lid off of which the plastic bounces if tries to cross the ocean surface
     potential = particle.depth + w_m_step
     if potential < 0.6:
-        particle.depth = 0.6 - potential
+        particle.depth = 0.6 + (0.6 - potential)
+    else:
+        particle.depth = potential
+
+def markov_0_KPP_float(particle, fieldset, time):
+    """
+    If a particle tries to cross the boundary, then it is reflected back
+    Author: Victor Onink
+    Adapted 1D -> 3D
+    """
+    rho_w = particle.density
+    k = fieldset.vk          # Von Karman constant
+    f_phi = fieldset.phi        # Stability function in Monin-Obukhov boundary layer theory
+    z0 = 0.008                # [m] Surface roughness estimate
+    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.mld = particle.depth/mld
+
+    # Define KPP profile from tau and mld
+    u_s = math.sqrt(fieldset.tau[time, particle.depth, particle.lat, particle.lon]/rho_w)
+    alpha = (k * u_s) / f_phi
+
+    if particle.mld<1:
+        dK_z_p = alpha * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
+    else:
+        dK_z_p = 0
+
+    KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
+    if particle.mld<1:
+        K_z = KPP + fieldset.bulk_diff
+    else:
+        K_z = fieldset.bulk_diff
+
+    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    deterministic = dK_z_p * particle.dt
+
+    # The random walk component
+    R = ParcelsRandom.uniform(-1., 1.) * math.sqrt(math.fabs(particle.dt) * 3)
+    bz = math.sqrt(2 * K_z)
+
+    # Total movement
+    w_m_step = deterministic + R * bz
+    particle.w_m = w_m_step/particle.dt
+
+    # particles stop moving at the ocean surface
+    potential = particle.depth + w_m_step
+    if potential < 0.6:
+        particle.depth = 0.6
     else:
         particle.depth = potential
 
@@ -380,7 +425,7 @@ if __name__ == "__main__":
                    help='start year for the run')
     p.add_argument('-region', choices = ('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
-    p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
+    p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect', 'markov_0_KPP_float'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     
@@ -529,7 +574,7 @@ if __name__ == "__main__":
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices) 
     fieldset.add_constant('mortality_rate', mortality_rate)
     fieldset.add_constant('collision_eff', collision_eff)
-    if mixing == 'markov_0_KPP_reflect':
+    if mixing == 'markov_0_KPP_reflect' or mixing == 'markov_0_KPP_float':
         fieldset.add_constant('vk', 0.4)
         fieldset.add_constant('phi', 0.9)
         fieldset.add_constant('bulk_diff', 3.7e-4)
@@ -578,14 +623,16 @@ if __name__ == "__main__":
     elif mon=='01':
         s = 'Jan'
     
-    kernels = pset.Kernel(AdvectionRK4_3D) 
+    kernels = pset.Kernel(AdvectionRK4_3D) +  pset.Kernel(PolyTEOS10_bsq) 
     if mixing == 'fixed':
         kernels += pset.Kernel(vertical_mixing_random_constant)
     elif mixing == 'markov_0_KPP_reflect':
         kernels += pset.Kernel(markov_0_KPP_reflect)
+    elif mixing == 'markov_0_KPP_float':
+        kernels += pset.Kernel(markov_0_KPP_float)
     else:
         kernels += pset.Kernel(mixed_layer)
-    kernels += pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi) 
+    kernels += pset.Kernel(Profiles) + pset.Kernel(Kooi) 
     proc = 'bfadv'
 
     if system == 'cartesius':

@@ -297,14 +297,53 @@ def vertical_mixing_random_constant(particle, fieldset, time):
 def mixed_layer(particle, fieldset, time):
     particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
 
-def markov_0_reflect(particle, fieldset, time):
+def markov_0_KPP_reflect(particle, fieldset, time):
     """
     If a particle tries to cross the boundary, then it is reflected back
     Author: Victor Onink
     Adapted 1D -> 3D
     """
-    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    rho_w = particle.density
+    k = fieldset.vk          # Von Karman constant
+    f_phi = fieldset.phi        # Stability function in Monin-Obukhov boundary layer theory
+    z0 = 0.008                # [m] Surface roughness estimate
+    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.mld = particle.depth/mld
+
+    # Define KPP profile from tau and mld
+    u_s = math.sqrt(fieldset.tau[time, particle.depth, particle.lat, particle.lon]/rho_w)
+    alpha = (k * u_s) / f_phi
+        
+    if particle.mld<1:
+        dK_z_p = alpha * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
+    else:
+        dK_z_p = 0
     
+    KPP = alpha * (particle.depth+z0) * math.pow(1 - particle.depth / mld, 2)
+    #KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
+    if particle.mld<1:
+        K_z = KPP + fieldset.bulk_diff
+    else:
+        K_z = fieldset.bulk_diff
+    
+    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    deterministic = dK_z_p * particle.dt
+
+    # The random walk component
+    R = ParcelsRandom.uniform(-1., 1.) * math.sqrt(math.fabs(particle.dt) * 3)
+    bz = math.sqrt(2 * K_z)
+
+    # Total movement
+    w_m_step = deterministic + R * bz
+    particle.w_m = w_m_step/particle.dt
+
+    # The ocean surface acts as a lid off of which the plastic bounces if tries to cross the ocean surface
+    potential = particle.depth + w_m_step
+    if potential < 0.6:
+        particle.depth = 0.6 - potential
+    else:
+        particle.depth = potential
+
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -341,7 +380,7 @@ if __name__ == "__main__":
                    help='start year for the run')
     p.add_argument('-region', choices = ('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-a_mort', choices = ('0.16', '0.39', '0.5'), action = "store", dest = 'mortality_rate', help='Mortality rate in d-1')
-    p.add_argument('-mixing', choices = ('no', 'fixed'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
+    p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     
@@ -440,7 +479,8 @@ if __name__ == "__main__":
                  'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
                  'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
                  'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
+                 'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
+                 'tau': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
 
     variables = {'U': 'uo',
                  'V': 'vo',
@@ -450,7 +490,8 @@ if __name__ == "__main__":
                  'tpp3': 'TPP3', # units: mmolN/m3/d 
                  'cons_temperature': 'potemp',
                  'abs_salinity': 'salin',
-                 'mldr': 'mldr10_1'}
+                 'mldr': 'mldr10_1',
+                 'tau': 'taum'}
 
     dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}, #time_centered
                   'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
@@ -460,7 +501,8 @@ if __name__ == "__main__":
                   'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
                   'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'}}
+                  'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
+                  'tau': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'}}
     
     initialgrid_mask = dirread+'ORCA0083-N06_20070105d05U.nc'
     mask = xr.open_dataset(initialgrid_mask, decode_times=False)
@@ -481,24 +523,19 @@ if __name__ == "__main__":
            'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}}
+           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'tau': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}}
         
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices) 
     fieldset.add_constant('mortality_rate', mortality_rate)
     fieldset.add_constant('collision_eff', collision_eff)
-
+    if mixing == 'markov_0_KPP_reflect':
+        fieldset.add_constant('vk', 0.4)
+        fieldset.add_constant('phi', 0.9)
+        fieldset.add_constant('bulk_diff', 3.7e-4)
     lons = fieldset.U.lon
     lats = fieldset.U.lat
     depths = fieldset.U.depth
-
-    #------ Kinematic viscosity and dynamic viscosity not available in MEDUSA so replicating Kooi's profiles at all grid points ------
-    with open('/scratch/rfischer/Kooi_data/data_input/profiles.pickle', 'rb') as f:
-        depth,T_z,S_z,rho_z,upsilon_z,mu_z = pickle.load(f)
-
-    KV = Field('KV', np.array(upsilon_z), lon=0, lat=0, depth=depths, mesh='spherical') #np.empty(1)
-    SV = Field('SV', np.array(mu_z), lon=0, lat=0, depth=depths, mesh='spherical')
-    fieldset.add_field(KV, 'KV')
-    fieldset.add_field(SV, 'SV')
 
     """ Defining the particle set """   
        
@@ -544,6 +581,8 @@ if __name__ == "__main__":
     kernels = pset.Kernel(AdvectionRK4_3D) 
     if mixing == 'fixed':
         kernels += pset.Kernel(vertical_mixing_random_constant)
+    elif mixing == 'markov_0_KPP_reflect':
+        kernels += pset.Kernel(markov_0_KPP_reflect)
     else:
         kernels += pset.Kernel(mixed_layer)
     kernels += pset.Kernel(PolyTEOS10_bsq) + pset.Kernel(Profiles) + pset.Kernel(Kooi) 

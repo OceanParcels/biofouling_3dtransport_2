@@ -82,7 +82,7 @@ def Kooi(particle,fieldset,time):
     vs = particle.vs             # [m s-1]   
 
     #------ Constants and algal properties -----
-    g = 7.32e10/(86400.**2.)    # gravitational acceleration (m d-2), now [s-2]
+    g = fieldset.g_const        # gravitational acceleration [m s-2]
     k = 1.0306E-13/(86400.**2.) # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
     rho_bf = 1388.              # density of biofilm ([g m-3]
     v_a = 2.0E-16               # Volume of 1 algal cell [m-3]
@@ -180,7 +180,7 @@ def Kooi_no_biofouling(particle,fieldset,time):
     vs = particle.vs             # vertical velocity[m s-1]   
 
     #------ Constants -----
-    g = 7.32e10/(86400.**2.)    # gravitational acceleration (m d-2), now [s-2]
+    g = fieldset.g_const         # gravitational acceleration (m d-2), now [s-2]
     
     #------ Volumes -----
     v_pl = (4./3.)*math.pi*particle.r_pl**3.             # volume of plastic [m3]
@@ -303,19 +303,24 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     Author: Victor Onink
     Adapted 1D -> 3D
     """
+    g= fieldset.g_const
+    rho_a = fieldset.rho_a_const
     rho_w = particle.density
-    k = fieldset.vk          # Von Karman constant
-    f_phi = fieldset.phi        # Stability function in Monin-Obukhov boundary layer theory
-    z0 = 0.008                # [m] Surface roughness estimate
     mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
     particle.mld = particle.depth/mld
 
     # Define KPP profile from tau and mld
-    u_s = math.sqrt(fieldset.tau[time, particle.depth, particle.lat, particle.lon]/rho_w)
-    alpha = (k * u_s) / f_phi
+    u_s_a =  math.sqrt(tau/rho_a)
+    u_s_w = math.sqrt(tau/rho_w)
+    alpha_dt = (fieldset.vk * u_s_w) / (fieldset.phi * mld ** 2)
+    alpha = (fieldset.vk * u_s_w) / fieldset.phi
+
+    beta = fieldset.wave_age * u_s_a / fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    z0 = 3.5153e-5 * math.pow(beta, -0.42) * math.pow(fieldset.w_10[time, particle.depth, particle.lat, particle.lon], 2) / g 
         
     if particle.mld<1:
-        dK_z_p = alpha * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
+        dK_z_p = alpha_dt * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
     else:
         dK_z_p = 0
     
@@ -358,12 +363,14 @@ def markov_0_KPP_float(particle, fieldset, time):
 
     # Define KPP profile from tau and mld
     u_s = math.sqrt(fieldset.tau[time, particle.depth, particle.lat, particle.lon]/rho_w)
-    alpha = (k * u_s) / f_phi
+    alpha_dt = (k * u_s) / (f_phi * mld ** 2)
 
     if particle.mld<1:
-        dK_z_p = alpha * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
+        dK_z_p = alpha_dt * (mld - particle.depth) * (mld - 3 * particle.depth - 2 * z0)
     else:
         dK_z_p = 0
+
+    alpha = (k * u_s) / f_phi 
 
     KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
     if particle.mld<1:
@@ -525,7 +532,8 @@ if __name__ == "__main__":
                  'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
                  'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
                  'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'tau': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
+                 'taum': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
+                 'w_10': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles}}
 
     variables = {'U': 'uo',
                  'V': 'vo',
@@ -536,7 +544,8 @@ if __name__ == "__main__":
                  'cons_temperature': 'potemp',
                  'abs_salinity': 'salin',
                  'mldr': 'mldr10_1',
-                 'tau': 'taum'}
+                 'taum': 'taum',
+                 'w_10': 'sowindsp'}
 
     dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}, #time_centered
                   'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
@@ -547,7 +556,8 @@ if __name__ == "__main__":
                   'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                  'tau': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'}}
+                  'taum': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
+                  'w_10': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'}}
     
     initialgrid_mask = dirread+'ORCA0083-N06_20070105d05U.nc'
     mask = xr.open_dataset(initialgrid_mask, decode_times=False)
@@ -569,7 +579,8 @@ if __name__ == "__main__":
            'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'tau': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}}
+           'taum': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'w_10': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}}
         
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices) 
     fieldset.add_constant('mortality_rate', mortality_rate)
@@ -578,6 +589,9 @@ if __name__ == "__main__":
         fieldset.add_constant('vk', 0.4)
         fieldset.add_constant('phi', 0.9)
         fieldset.add_constant('bulk_diff', 3.7e-4)
+        fieldset.add_constant('rho_a_const', 1.22)
+        fieldset.add_constant('g_const', 7.32e10/(86400.**2.))
+        fieldset.add_constant('wave_age', 35)
     lons = fieldset.U.lon
     lats = fieldset.U.lat
     depths = fieldset.U.depth

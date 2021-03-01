@@ -16,7 +16,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 20 #90
+simdays = 80
 secsdt = 60 #30
 hrsoutdt = 12 #2
 
@@ -47,7 +47,7 @@ def Kooi(particle,fieldset,time):
 
     #------ Nitrogen to cell ratios for ambient algal concentrations ('aa') and algal growth ('mu_aa') from NEMO output (no longer using N:C:AA (Redfield ratio), directly N:AA from Menden-Deuer and Lessard 2000)     
     med_N2cell = 356.04e-09 # [mgN cell-1] median value is used below (as done in Kooi et al. 2017)
-    wt_N = fieldset.WT_N    # atomic weight of 1 mol of N = 14.007 g
+    wt_N = fieldset.Wt_N    # atomic weight of 1 mol of N = 14.007 g
       
     #------ Ambient algal concentration from MEDUSA's non-diatom + diatom phytoplankton 
     n0 = particle.nd_phy+particle.d_phy # [mmol N m-3] total plankton concentration engaging in primary production in MEDUSA
@@ -145,7 +145,7 @@ def Kooi(particle,fieldset,time):
     
 def DeleteParticle(particle, fieldset, time):
     """Kernel for deleting particles if they are out of bounds."""
-    print('particle is deleted at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth)) #print(particle.lon, particle.lat, particle.depth)
+    print('particle is deleted at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
     particle.delete() 
     
 def getclosest_ij(lats,lons,latpt,lonpt):     
@@ -252,9 +252,9 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     
     KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
     if particle.mld<1:
-        K_z = KPP + fieldset.bulk_diff
+        K_z = KPP + fieldset.Bulk_diff
     else:
-        K_z = fieldset.bulk_diff
+        K_z = fieldset.Bulk_diff
     
     # According to Ross & Sharples (2004), first the deterministic part of equation 1
     deterministic = dK_z_p * particle.dt
@@ -382,14 +382,14 @@ if __name__ == "__main__":
         pfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05P.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05P.nc')))
         ppfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05D.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05D.nc')))
         tsfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr0+'1*d05T.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc')))
-    elif mon == '01':
-        yr0 = yr
-        ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05U.nc'))
-        vfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05V.nc'))
-        wfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05W.nc'))
-        pfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05P.nc'))
-        ppfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05D.nc'))
-        tsfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05T.nc'))
+#     elif mon == '01':
+#         yr0 = yr
+#         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05U.nc'))
+#         vfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05V.nc'))
+#         wfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05W.nc'))
+#         pfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05P.nc'))
+#         ppfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05D.nc'))
+#         tsfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05T.nc'))
     else:
         yr0 = yr
         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05U.nc')) 
@@ -472,13 +472,13 @@ if __name__ == "__main__":
     fieldset.add_constant('Q10', 2.)                         # temperature coefficient respiration [-]
     fieldset.add_constant('Gamma', 1.728E5 / 86400.)         # shear [d-1], now [s-1]
     fieldset.add_constant('Wt_N', 14.007)                    # atomic weight of nitrogen
-
+    fieldset.add_constant('G', 7.32e10/(86400.**2.))
+    
     if mixing == 'markov_0_KPP_reflect' or mixing == 'markov_0_KPP_float':
         fieldset.add_constant('Vk', 0.4)
         fieldset.add_constant('Phi', 0.9)
         fieldset.add_constant('Bulk_diff', 3.7e-4)
-        fieldset.add_constant('Rho_a', 1.22)
-        fieldset.add_constant('G', 7.32e10/(86400.**2.))
+        fieldset.add_constant('Rho_a', 1.22) 
         fieldset.add_constant('Wave_age', 35)
 
     lons = fieldset.U.lon
@@ -541,7 +541,7 @@ if __name__ == "__main__":
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-         outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+         outfile = '/scratch/dlobelle/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(collision_eff))

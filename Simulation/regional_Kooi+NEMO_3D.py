@@ -530,7 +530,7 @@ if __name__ == "__main__":
 
     if bg_mixing == 'tidal':
         variable = ('Kz', 'TIDAL_Kz')
-        dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'depth_midpoint'}
+        dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'Depth_midpoint'}
         Kz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variable, dimension)
         fieldset.add_field(Kz_field)
 

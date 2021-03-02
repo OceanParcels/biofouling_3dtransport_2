@@ -7,6 +7,7 @@
 #$ -m e
 #$ -l h_vmem=20G
 #$ -l h_rt=2:00:00
+#$ -q all.q
 
 echo 'Start'
 cd ${HOME}/biofouling_3dtransport_2/Preprocessing/

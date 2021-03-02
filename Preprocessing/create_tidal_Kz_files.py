@@ -38,9 +38,12 @@ def create_tidal_Kz_files(file_name: str):
     # Try to skip an use parcels sigma-grids reading
     # TIDAL_Kz_inter = interpolate_to_DEPTH(TIDAL_Kz, TIDAL_data, DEPTH)
     
+    # Create 1D depth profile
+    depth_id = np.argwhere(TIDAL_data['depth_midpoint']==np.nanmax(TIDAL_data['depth_midpoint']))[0,1:] 
+    depths = TIDAL_data['depth_midpoint'][:,depth_id[0],depth_id[1]].data
     # Extrapolate surface to depth = 0m
     TIDAL_Kz_ext = np.insert(TIDAL_Kz, 0, TIDAL_Kz[0], axis=0)
-    depths = np.insert(TIDAL_data['depth_midpoint'], 0, np.zeros((1,len(TIDAL_data['depth_midpoint'][0]),1)), axis=0)
+    depths = np.insert(depths, 0, [0])
     
     # Now we interpolate the Kz values onto the model grid defined by LON, LAT and DEPTH
     # Use original grid instead
@@ -53,7 +56,6 @@ def create_tidal_Kz_files(file_name: str):
     # Sort longitudes and corresponding data
     ids = np.argsort(lons)
     lons = lons[ids]
-    depths = depths[:,:,ids]
     TIDAL_Kz_ext = TIDAL_Kz_ext[:,:,ids]
     # Due to very low N^2 values (corresponding to very weak stratification), there are some regions where Kz is
     # unfeasibly high (Kz > 100 m^2/s). Therefore, I cap GRID_Kz at 0.1 m^2/s. This only affects 0.08% of all the cells
@@ -68,7 +70,7 @@ def create_tidal_Kz_files(file_name: str):
     #dset.to_netcdf(file_name)
     coords = {'Latitude': (['Latitude'], TIDAL_data['lat']),
               'Longitude': (['Longitude'], lons),
-              'depth_midpoint':(['Depth_midpoint', 'Latitude', 'Longitude'], depths)}
+              'Depth_midpoint':(['Depth_midpoint'], depths)}
     dims = ('Depth_midpoint', 'Latitude', 'Longitude')
     dset = xarray.Dataset({'TIDAL_Kz': xarray.DataArray(TIDAL_Kz_ext, dims=dims, coords=coords)}, coords=coords)
     dset.to_netcdf(file_name)

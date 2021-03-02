@@ -145,9 +145,14 @@ def Kooi(particle,fieldset,time):
     
 def DeleteParticle(particle, fieldset, time):
     """Kernel for deleting particles if they are out of bounds."""
-    print('particle is deleted at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
+    print('particle is deleted out of bounds at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
     particle.delete() 
     
+def DeleteParticleInterp(particle, fieldset, time):
+    """Kernel for deleting particles if they are out of bounds."""
+    print('particle is deleted due to an interpolation error at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
+    particle.delete()
+
 def getclosest_ij(lats,lons,latpt,lonpt):     
     """Function to find the index of the closest point to a certain lon/lat value."""
     dist_sq = (lats-latpt)**2 + (lons-lonpt)**2                 # find squared distance of every point on grid
@@ -274,6 +279,64 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     else:
         particle.depth = potential
 
+
+def markov_0_KPP_reflect_tidal(particle, fieldset, time):
+    """
+    If a particle tries to cross the boundary, then it is reflected back
+    Author: Victor Onink
+    Adapted 1D -> 3D
+    """
+    g= fieldset.G
+    rho_a = fieldset.Rho_a
+    wave_age = fieldset.Wave_age
+    phi = fieldset.Phi
+    vk = fieldset.Vk
+
+    rho_sw = particle.density
+    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.mld = particle.depth/mld
+
+    K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
+    
+    # Define KPP profile from tau and mld
+    u_s_a =  math.sqrt(tau/rho_a)
+    u_s_w = math.sqrt(tau/rho_sw)
+    alpha_dt = (vk * u_s_w) / (phi * mld ** 2)
+    alpha = (vk * u_s_w) / phi
+
+    beta = wave_age * u_s_a / fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    z0 = 3.5153e-5 * math.pow(beta, -0.42) * math.pow(fieldset.w_10[time, particle.depth, particle.lat, particle.lon], 2) / g
+
+    if particle.mld<1:
+        dK_z_p = alpha_dt * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
+    else:
+        dK_z_p = 0
+
+    KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
+    if particle.mld<1:
+        K_z = KPP + K_z_t
+    else:
+        K_z = K_z_t
+
+    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    deterministic = dK_z_p * particle.dt
+
+    # The random walk component
+    R = ParcelsRandom.uniform(-1., 1.) * math.sqrt(math.fabs(particle.dt) * 3)
+    bz = math.sqrt(2 * K_z)
+
+    # Total movement
+    w_m_step = deterministic + R * bz
+    particle.w_m = w_m_step/particle.dt
+
+    # The ocean surface acts as a lid off of which the plastic bounces if tries to cross the ocean surface
+    potential = particle.depth + w_m_step
+    if potential < 0.6:
+        particle.depth = 0.6 + (0.6 - potential)
+    else:
+        particle.depth = potential
+
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -313,7 +376,7 @@ if __name__ == "__main__":
     p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect', 'markov_0_KPP_float'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
-    
+    p.add_argument('-bg_mixing', choices=('0', '0.00037', '0.00001', 'tidal'), action='store', dest = 'bg_mixing') 
 
     args = p.parse_args()
     mon = args.mon
@@ -325,7 +388,10 @@ if __name__ == "__main__":
     no_biofouling = False #no_biofouling = args.no_biofouling
     no_advection = False #no_advection = args.no_advection
     system = args.system
-    
+    if args.bg_mixing != 'tidal':
+        bg_mixing = float(args.bg_mixing)
+    else:
+        bg_mixing = args.bg_mixing 
     """ Load particle release locations from plot_NEMO_landmask.ipynb """
     # CHOOSE
 
@@ -462,6 +528,12 @@ if __name__ == "__main__":
         
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices)
 
+    if bg_mixing == 'tidal':
+        variable = ('Kz', 'TIDAL_Kz')
+        dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'depth_midpoint'}
+        Kz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variable, dimension)
+        fieldset.add_field(Kz_field)
+
     # ------ Defining constants ------
     fieldset.add_constant('M_a', mortality_rate / 86400.)
     fieldset.add_constant('collision_eff', collision_eff)
@@ -477,8 +549,9 @@ if __name__ == "__main__":
     if mixing == 'markov_0_KPP_reflect' or mixing == 'markov_0_KPP_float':
         fieldset.add_constant('Vk', 0.4)
         fieldset.add_constant('Phi', 0.9)
-        fieldset.add_constant('Bulk_diff', 3.7e-4)
-        fieldset.add_constant('Rho_a', 1.22) 
+        if isinstance(bg_mixing, float) or isinstance(bg_mixing, int):
+            fieldset.add_constant('Bulk_diff', bg_mixing)
+        fieldset.add_constant('Rho_a', 1.22)
         fieldset.add_constant('Wave_age', 35)
 
     lons = fieldset.U.lon
@@ -529,10 +602,10 @@ if __name__ == "__main__":
     kernels = pset.Kernel(AdvectionRK4_3D) +  pset.Kernel(PolyTEOS10_bsq) 
     if mixing == 'fixed':
         kernels += pset.Kernel(vertical_mixing_random_constant)
+    elif mixing == 'markov_0_KPP_reflect' and bg_mixing== 'tidal':
+        kernels += pset.Kernel(markov_0_KPP_reflect_tidal)
     elif mixing == 'markov_0_KPP_reflect':
         kernels += pset.Kernel(markov_0_KPP_reflect)
-    elif mixing == 'markov_0_KPP_float':
-        kernels += pset.Kernel(markov_0_KPP_float)
     else:
         kernels += pset.Kernel(mixed_layer)
     kernels += pset.Kernel(Profiles) + pset.Kernel(Kooi) 
@@ -541,13 +614,14 @@ if __name__ == "__main__":
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-         outfile = '/scratch/dlobelle/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'_'+str(bg_mixing)+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(collision_eff))
     pfile.add_metadata('mortality rate', str(mortality_rate))
+    pfile.add_metadata('background mixing', str(bg_mixing))
 
-    pset.execute(kernels, runtime=delta(days=simdays), dt=delta(seconds = secsdt), output_file=pfile, verbose_progress=True, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle, ErrorCode.ErrorInterpolation: DeleteParticle})
+    pset.execute(kernels, runtime=delta(days=simdays), dt=delta(seconds = secsdt), output_file=pfile, verbose_progress=True, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle, ErrorCode.ErrorInterpolation: DeleteParticleInterp})
 
     pfile.close()
 

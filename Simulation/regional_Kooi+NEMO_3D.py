@@ -1,3 +1,9 @@
+"""
+Authors: Delphine Lobelle, Reint Fischer
+
+Executable python script to simulate regional biofouling particles with parameterized wind and tidal mixing.
+"""
+
 from parcels import FieldSet, ParticleSet, JITParticle, ScipyParticle, AdvectionRK4_3D, AdvectionRK4, ErrorCode, ParticleFile, Variable, Field, NestedField, VectorField, timer, ParcelsRandom 
 from parcels.kernels.TEOSseawaterdensity import PolyTEOS10_bsq
 from datetime import timedelta as delta
@@ -16,7 +22,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 80
+simdays = 10
 secsdt = 60 #30
 hrsoutdt = 12 #2
 
@@ -145,9 +151,14 @@ def Kooi(particle,fieldset,time):
     
 def DeleteParticle(particle, fieldset, time):
     """Kernel for deleting particles if they are out of bounds."""
-    print('particle is deleted at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
+    print('particle is deleted out of bounds at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
     particle.delete() 
     
+def DeleteParticleInterp(particle, fieldset, time):
+    """Kernel for deleting particles if they are out of bounds."""
+    print('particle is deleted due to an interpolation error at lon = '+str(particle.lon)+', lat ='+str(particle.lat)+', depth ='+str(particle.depth))
+    particle.delete()
+
 def getclosest_ij(lats,lons,latpt,lonpt):     
     """Function to find the index of the closest point to a certain lon/lat value."""
     dist_sq = (lats-latpt)**2 + (lons-lonpt)**2                 # find squared distance of every point on grid
@@ -155,9 +166,9 @@ def getclosest_ij(lats,lons,latpt,lonpt):
     return np.unravel_index(minindex_flattened, lats.shape)     # Get 2D index for latvals and lonvals arrays from 1D index
 
 def periodicBC(particle, fieldset, time):
-    if particle.lon < 0.:
+    if particle.lon <= -180.:
         particle.lon += 360.
-    elif particle.lon >= 360.:
+    elif particle.lon >= 180.:
         particle.lon -= 360.
            
 def Profiles(particle, fieldset, time):  
@@ -188,10 +199,12 @@ def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
 def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     '''
     Create a set of particle radii according to the Cozar distribution.
+
     :param number_of_particles: Size of particleset
     :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
     :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
     '''
+
     nbins = e_max-e_min+1
     bins = np.logspace(e_min, e_max, nbins)
     distribution = bins[-1]**2/(bins**2)
@@ -201,6 +214,23 @@ def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     for i,r in enumerate(bins):
         r_pls += [r]*particles_per_bin[i]
     return r_pls
+
+def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
+    '''
+    Create a set of particle radii with a fixed amount of particles per bin for a given number of release locations.
+    The bins are spaced logarithmically.
+
+    :param n_locs: number of release locations
+    :param n_particles_per_bin: number of particles per bin:
+    :param n_bins: number of bins between 1E-e_max and 1E-e_min
+    :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
+    :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
+    '''
+    sizes = np.logspace(e_min, e_max, n_bins)
+    location_r_pls = np.repeat(sizes, n_particles_per_bin)
+    r_pls = np.tile(location_r_pls, [n_locs,1])
+    return r_pls
+
 
 def vertical_mixing_random_constant(particle, fieldset, time):
     mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
@@ -233,28 +263,29 @@ def markov_0_KPP_reflect(particle, fieldset, time):
 
     rho_sw = particle.density
     mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
-    tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
     particle.mld = particle.depth/mld
+    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
 
     # Define KPP profile from tau and mld
-    u_s_a =  math.sqrt(tau/rho_a)
-    u_s_w = math.sqrt(tau/rho_sw)
+    u_s_a =  math.sqrt(particle.tau/rho_a)
+    u_s_w = math.sqrt(particle.tau/rho_sw)
     alpha_dt = (vk * u_s_w) / (phi * mld ** 2)
     alpha = (vk * u_s_w) / phi
 
-    beta = wave_age * u_s_a / fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
-    z0 = 3.5153e-5 * math.pow(beta, -0.42) * math.pow(fieldset.w_10[time, particle.depth, particle.lat, particle.lon], 2) / g 
+    beta = wave_age * u_s_a / particle.w10
+    z0 = 3.5153e-5 * math.pow(beta, -0.42) * math.pow(particle.w10, 2) / g 
         
     if particle.mld<1:
         dK_z_p = alpha_dt * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
     else:
         dK_z_p = 0
     
-    KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
+    particle.KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
     if particle.mld<1:
-        K_z = KPP + fieldset.Bulk_diff
+        K_z = particle.KPP
     else:
-        K_z = fieldset.Bulk_diff
+        K_z = 0.
     
     # According to Ross & Sharples (2004), first the deterministic part of equation 1
     deterministic = dK_z_p * particle.dt
@@ -274,6 +305,36 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     else:
         particle.depth = potential
 
+
+def tidal_diffusivity(particle, fieldset, time):
+    """
+    If a particle tries to cross the boundary, then it is reflected back
+    Author: Victor Onink
+    Adapted 1D -> 3D
+    """
+    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
+    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
+
+    dK_z = particle.dK_z_t
+    K_z = particle.K_z_t
+
+    # According to Ross & Sharples (2004), first the deterministic part of equation 1
+    deterministic = dK_z * particle.dt
+
+    # The random walk component
+    R = ParcelsRandom.uniform(-1., 1.) * math.sqrt(math.fabs(particle.dt) * 3)
+    bz = math.sqrt(2 * K_z)
+
+    # Total movement
+    w_t_step = deterministic + R * bz
+    particle.w_m_b = w_t_step/particle.dt
+    # The ocean surface acts as a lid off of which the plastic bounces if tries to cross the ocean surface
+    potential = particle.depth + w_t_step
+    if potential < 0.6:
+        particle.depth = 0.6 + (0.6 - potential)
+    else:
+        particle.depth = potential
+
 """ Defining the particle class """
 
 class plastic_particle(JITParticle): #ScipyParticle): #
@@ -282,7 +343,7 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     w = Variable('w', dtype=np.float32,to_write=True)
     w_adv = Variable('w_adv', dtype=np.float32,to_write=True)
     temp = Variable('temp',dtype=np.float32,to_write=False)
-    density = Variable('density',dtype=np.float32,to_write=True)
+    density = Variable('density',dtype=np.float32,to_write=False)
     tpp3 = Variable('tpp3',dtype=np.float32,to_write=True)
     d_phy = Variable('d_phy',dtype=np.float32,to_write=True)
     nd_phy = Variable('nd_phy',dtype=np.float32,to_write=True)
@@ -290,15 +351,21 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     a_coll = Variable('a_coll', dtype=np.float32, to_write=True)
     a_growth = Variable('a_growth', dtype=np.float32, to_write=True)
     a_resp = Variable('a_resp', dtype=np.float32, to_write=True)
-    kin_visc = Variable('kin_visc',dtype=np.float32,to_write=True)
-    sw_visc = Variable('sw_visc',dtype=np.float32,to_write=True)
+    kin_visc = Variable('kin_visc',dtype=np.float32,to_write=False)
+    sw_visc = Variable('sw_visc',dtype=np.float32,to_write=False)
     vs = Variable('vs',dtype=np.float32,to_write=True)
     w_m = Variable('w_m', dtype=np.float32, to_write=True)
+    w_m_b = Variable('w_m_b', dtype=np.float32, to_write=True)
     mld = Variable('mld', dtype=np.float32, to_write=True) 
     rho_tot = Variable('rho_tot',dtype=np.float32,to_write=True) 
     r_tot = Variable('r_tot',dtype=np.float32,to_write=True)
     delta_rho = Variable('delta_rho',dtype=np.float32,to_write=True)
     vs_init = Variable('vs_init',dtype=np.float32,to_write=True)
+    KPP = Variable('KPP', dtype=np.float32, to_write=True)
+    K_z_t = Variable('K_z_t', dtype=np.float32, to_write=True)
+    dK_z_t = Variable('dK_z_t', dtype=np.float32, to_write=True)
+    tau = Variable('tau', dtype=np.float32, to_write=True)
+    w10 = Variable('w10', dtype=np.float32, to_write=True)
     r_pl = Variable('r_pl',dtype=np.float32,to_write='once')   
     rho_pl = Variable('rho_pl',dtype=np.float32,to_write='once')
     
@@ -313,7 +380,7 @@ if __name__ == "__main__":
     p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect', 'markov_0_KPP_float'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
     p.add_argument('-collision_eff', choices = ('1', '0.5'), default='1', action='store', dest='collision_eff', help='Collision efficiency: fraction of colliding algae that stick to the particle')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
-    
+    p.add_argument('-bg_mixing', choices=('0', '0.00037', '0.00001', 'tidal'), action='store', dest = 'bg_mixing') 
 
     args = p.parse_args()
     mon = args.mon
@@ -325,7 +392,10 @@ if __name__ == "__main__":
     no_biofouling = False #no_biofouling = args.no_biofouling
     no_advection = False #no_advection = args.no_advection
     system = args.system
-    
+    if args.bg_mixing != 'tidal':
+        bg_mixing = float(args.bg_mixing)
+    else:
+        bg_mixing = args.bg_mixing 
     """ Load particle release locations from plot_NEMO_landmask.ipynb """
     # CHOOSE
 
@@ -338,29 +408,13 @@ if __name__ == "__main__":
     elif region == 'EqPac':
         minlat = -20 
         maxlat = 20
-        minlon = -180
+        minlon = 160
         maxlon = -120
     elif region == 'SO':
         minlat = -75
         maxlat = -45
         minlon = -15
         maxlon = 25
-
-    #------ Release particles on a 10x10 deg grid ------
-    if region == 'NPSG':
-        lat_release0 = np.tile(np.linspace(28,36,50),[50,1]) #(20,28,5),[5,1]) 
-        lat_release = lat_release0.T 
-        lon_release = np.tile(np.linspace(-135,-143,50),[50,1]) #(-140,-148,5),[5,1]) 
-    elif region == 'EqPac':
-        lat_release0 = np.tile(np.linspace(-4,4,50),[50,1]) 
-        lon_release = np.tile(np.linspace(-140,-148,50),[50,1])
-        lat_release = lat_release0.T
-    elif region == 'SO':
-        lat_release0  = np.tile(np.linspace(-65,-55,50),[50,1])
-        lon_release = np.tile(np.linspace(-10,0,50),[50,1])
-        lat_release = lat_release0.T
-    z_release = np.tile(0.6,[50,50]) 
-    res = '0.2x0.2' 
     
     """ Defining the fieldset""" 
     if system == 'cartesius':
@@ -462,6 +516,15 @@ if __name__ == "__main__":
         
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices)
 
+    if bg_mixing == 'tidal':
+        variable = ('Kz', 'TIDAL_Kz')
+        dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'Depth_midpoint'}
+        Kz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variable, dimension)
+        fieldset.add_field(Kz_field)
+        variabled = ('dKzdz', 'TIDAL_dKz')
+        dKz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variabled, dimension)
+        fieldset.add_field(dKz_field)
+
     # ------ Defining constants ------
     fieldset.add_constant('M_a', mortality_rate / 86400.)
     fieldset.add_constant('collision_eff', collision_eff)
@@ -477,8 +540,9 @@ if __name__ == "__main__":
     if mixing == 'markov_0_KPP_reflect' or mixing == 'markov_0_KPP_float':
         fieldset.add_constant('Vk', 0.4)
         fieldset.add_constant('Phi', 0.9)
-        fieldset.add_constant('Bulk_diff', 3.7e-4)
-        fieldset.add_constant('Rho_a', 1.22) 
+        if isinstance(bg_mixing, float) or isinstance(bg_mixing, int):
+            fieldset.add_constant('Bulk_diff', bg_mixing)
+        fieldset.add_constant('Rho_a', 1.22)
         fieldset.add_constant('Wave_age', 35)
 
     lons = fieldset.U.lon
@@ -486,9 +550,36 @@ if __name__ == "__main__":
     depths = fieldset.U.depth
 
     """ Defining the particle set """   
-       
-    rho_pls = [920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = select_from_Cozar_random_continuous(lon_release.size,[1e-3, 0.5e-3, 1e-4, 1e-5, 1e-6],-3)
+    n_res = 10
+    n_locs = n_res**2
+    n_sizebins = 25
+    n_particles_per_bin = 4
+
+    if region == 'NPSG':
+        lat_release0 = np.tile(np.linspace(28,36,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-135,-143,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+    elif region == 'EqPac':
+        lat_release0 = np.tile(np.linspace(-4,4,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-170,-178,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+    elif region == 'SO':
+        lat_release0  = np.tile(np.linspace(-65,-55,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-10,0,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+
+    z_release = np.tile(0.6,[n_res,n_res, n_sizebins*n_particles_per_bin])
+    res = '1x1'
+
+    rho_pls = np.tile(920, [n_res, n_res, n_sizebins*n_particles_per_bin])
+    r_pls = uniform_release(n_locs, n_particles_per_bin, n_sizebins)
+    #r_pls = select_from_Cozar_random_continuous(lon_release.size,[5e-3, 5e-4, 5e-5, 5e-6, 5e-7],-3)
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
@@ -496,22 +587,22 @@ if __name__ == "__main__":
                                  lat= lat_release, #36., 
                                  time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
-                                 r_pl = r_pls[0],
-                                 rho_pl = rho_pls[0] * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pls[0],
-                                 rho_tot = rho_pls[0] * np.ones(np.array(lon_release).size))
+                                 r_pl = r_pls,
+                                 rho_pl = rho_pls,
+                                 r_tot = r_pls,
+                                 rho_tot = rho_pls)
 
-    for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
-        pset.add(ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
-                                 pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
-                                 lon= lon_release, #-160.,  # a vector of release longitudes 
-                                 lat= lat_release, #36., 
-                                 time = np.datetime64('%s-%s-05' % (yr0, mon)),
-                                 depth = z_release,
-                                 r_pl = r_pl,
-                                 rho_pl = rho_pl * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pl,
-                                 rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
+    #for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
+    #    pset.add(ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
+    #                             pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
+    #                             lon= lon_release, #-160.,  # a vector of release longitudes 
+    #                             lat= lat_release, #36., 
+    #                             time = np.datetime64('%s-%s-05' % (yr0, mon)),
+    #                             depth = z_release,
+    #                             r_pl = r_pl,
+    #                             rho_pl = rho_pl * np.ones(np.array(lon_release).size),
+    #                             r_tot = r_pl,
+    #                             rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
 
 
     """ Kernal + Execution"""
@@ -526,28 +617,29 @@ if __name__ == "__main__":
     elif mon=='01':
         s = 'Jan'
     
-    kernels = pset.Kernel(AdvectionRK4_3D) +  pset.Kernel(PolyTEOS10_bsq) 
+    kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
     if mixing == 'fixed':
         kernels += pset.Kernel(vertical_mixing_random_constant)
     elif mixing == 'markov_0_KPP_reflect':
         kernels += pset.Kernel(markov_0_KPP_reflect)
-    elif mixing == 'markov_0_KPP_float':
-        kernels += pset.Kernel(markov_0_KPP_float)
     else:
         kernels += pset.Kernel(mixed_layer)
+    if bg_mixing == 'tidal':
+        kernels += pset.Kernel(tidal_diffusivity)
     kernels += pset.Kernel(Profiles) + pset.Kernel(Kooi) 
     proc = 'bfadv'
 
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-         outfile = '/scratch/dlobelle/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+res+'res_'+mixing+'_'+str(bg_mixing)+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(collision_eff))
     pfile.add_metadata('mortality rate', str(mortality_rate))
+    pfile.add_metadata('background mixing', str(bg_mixing))
 
-    pset.execute(kernels, runtime=delta(days=simdays), dt=delta(seconds = secsdt), output_file=pfile, verbose_progress=True, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle, ErrorCode.ErrorInterpolation: DeleteParticle})
+    pset.execute(kernels, runtime=delta(days=simdays), dt=delta(seconds = secsdt), output_file=pfile, verbose_progress=True, recovery={ErrorCode.ErrorOutOfBounds: DeleteParticle, ErrorCode.ErrorInterpolation: DeleteParticleInterp})
 
     pfile.close()
 

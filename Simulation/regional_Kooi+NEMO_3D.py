@@ -22,7 +22,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 80
+simdays = 10
 secsdt = 60 #30
 hrsoutdt = 12 #2
 
@@ -199,10 +199,12 @@ def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
 def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     '''
     Create a set of particle radii according to the Cozar distribution.
+
     :param number_of_particles: Size of particleset
     :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
     :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
     '''
+
     nbins = e_max-e_min+1
     bins = np.logspace(e_min, e_max, nbins)
     distribution = bins[-1]**2/(bins**2)
@@ -212,6 +214,23 @@ def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
     for i,r in enumerate(bins):
         r_pls += [r]*particles_per_bin[i]
     return r_pls
+
+def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
+    '''
+    Create a set of particle radii with a fixed amount of particles per bin for a given number of release locations.
+    The bins are spaced logarithmically.
+
+    :param n_locs: number of release locations
+    :param n_particles_per_bin: number of particles per bin:
+    :param n_bins: number of bins between 1E-e_max and 1E-e_min
+    :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
+    :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
+    '''
+    sizes = np.logspace(e_min, e_max, n_bins)
+    location_r_pls = np.repeat(sizes, n_particles_per_bin)
+    r_pls = np.tile(location_r_pls, [n_locs,1])
+    return r_pls
+
 
 def vertical_mixing_random_constant(particle, fieldset, time):
     mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
@@ -396,22 +415,6 @@ if __name__ == "__main__":
         maxlat = -45
         minlon = -15
         maxlon = 25
-
-    #------ Release particles on a 10x10 deg grid ------
-    if region == 'NPSG':
-        lat_release0 = np.tile(np.linspace(28,36,50),[50,1]) #(20,28,5),[5,1]) 
-        lat_release = lat_release0.T 
-        lon_release = np.tile(np.linspace(-135,-143,50),[50,1]) #(-140,-148,5),[5,1]) 
-    elif region == 'EqPac':
-        lat_release0 = np.tile(np.linspace(-4,4,50),[50,1]) 
-        lon_release = np.tile(np.linspace(-170,-178,50),[50,1])
-        lat_release = lat_release0.T
-    elif region == 'SO':
-        lat_release0  = np.tile(np.linspace(-65,-55,50),[50,1])
-        lon_release = np.tile(np.linspace(-10,0,50),[50,1])
-        lat_release = lat_release0.T
-    z_release = np.tile(0.6,[50,50]) 
-    res = '0.2x0.2' 
     
     """ Defining the fieldset""" 
     if system == 'cartesius':
@@ -547,9 +550,36 @@ if __name__ == "__main__":
     depths = fieldset.U.depth
 
     """ Defining the particle set """   
-       
-    rho_pls = [920, 920, 920, 920, 920]  # add/remove here if more needed
-    r_pls = select_from_Cozar_random_continuous(lon_release.size,[5e-3, 5e-4, 5e-5, 5e-6, 5e-7],-3)
+    n_res = 10
+    n_locs = n_res**2
+    n_sizebins = 25
+    n_particles_per_bin = 4
+
+    if region == 'NPSG':
+        lat_release0 = np.tile(np.linspace(28,36,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-135,-143,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+    elif region == 'EqPac':
+        lat_release0 = np.tile(np.linspace(-4,4,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-170,-178,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+    elif region == 'SO':
+        lat_release0  = np.tile(np.linspace(-65,-55,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-10,0,n_res),[n_res,1])
+
+        lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
+        lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
+
+    z_release = np.tile(0.6,[n_res,n_res, n_sizebins*n_particles_per_bin])
+    res = '1x1'
+
+    rho_pls = np.tile(920, [n_res, n_res, n_sizebins*n_particles_per_bin])
+    r_pls = uniform_release(n_locs, n_particles_per_bin, n_sizebins)
+    #r_pls = select_from_Cozar_random_continuous(lon_release.size,[5e-3, 5e-4, 5e-5, 5e-6, 5e-7],-3)
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
@@ -557,22 +587,22 @@ if __name__ == "__main__":
                                  lat= lat_release, #36., 
                                  time = np.datetime64('%s-%s-05' % (yr0, mon)),
                                  depth = z_release,
-                                 r_pl = r_pls[0],
-                                 rho_pl = rho_pls[0] * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pls[0],
-                                 rho_tot = rho_pls[0] * np.ones(np.array(lon_release).size))
+                                 r_pl = r_pls,
+                                 rho_pl = rho_pls,
+                                 r_tot = r_pls,
+                                 rho_tot = rho_pls)
 
-    for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
-        pset.add(ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
-                                 pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
-                                 lon= lon_release, #-160.,  # a vector of release longitudes 
-                                 lat= lat_release, #36., 
-                                 time = np.datetime64('%s-%s-05' % (yr0, mon)),
-                                 depth = z_release,
-                                 r_pl = r_pl,
-                                 rho_pl = rho_pl * np.ones(np.array(lon_release).size),
-                                 r_tot = r_pl,
-                                 rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
+    #for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
+    #    pset.add(ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
+    #                             pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
+    #                             lon= lon_release, #-160.,  # a vector of release longitudes 
+    #                             lat= lat_release, #36., 
+    #                             time = np.datetime64('%s-%s-05' % (yr0, mon)),
+    #                             depth = z_release,
+    #                             r_pl = r_pl,
+    #                             rho_pl = rho_pl * np.ones(np.array(lon_release).size),
+    #                             r_tot = r_pl,
+    #                             rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
 
 
     """ Kernal + Execution"""
@@ -602,7 +632,7 @@ if __name__ == "__main__":
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+str(mortality_rate)[2:]+'mort_'+mixing+'_'+str(bg_mixing)+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_0'+res+'res_'+mixing+'_'+str(bg_mixing)+'mixing_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(collision_eff))

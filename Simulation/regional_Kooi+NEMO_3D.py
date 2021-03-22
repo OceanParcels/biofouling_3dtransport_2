@@ -22,7 +22,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 10
+simdays = 80
 secsdt = 60 #30
 hrsoutdt = 12 #2
 
@@ -563,7 +563,7 @@ if __name__ == "__main__":
         lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T
     elif region == 'EqPac':
         lat_release0 = np.tile(np.linspace(-4,4,n_res),[n_res,1])
-        lon_release0 = np.tile(np.linspace(-170,-178,n_res),[n_res,1])
+        lon_release0 = np.tile(np.linspace(-140,-148,n_res),[n_res,1])
 
         lat_release = np.tile(lat_release0.T, [n_sizebins*n_particles_per_bin,1,1]).T
         lon_release = np.tile(lon_release0, [n_sizebins*n_particles_per_bin,1,1]).T

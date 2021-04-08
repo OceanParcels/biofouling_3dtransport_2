@@ -5,7 +5,7 @@ Executable python script to simulate regional biofouling particles with paramete
 """
 
 from parcels import FieldSet, ParticleSet, JITParticle, ScipyParticle, AdvectionRK4_3D, AdvectionRK4, ErrorCode, ParticleFile, Variable, Field, NestedField, VectorField, timer, ParcelsRandom 
-from parcels.kernels.TEOSseawaterdensity import PolyTEOS10_bsq
+from parcels.application_kernels.TEOSseawaterdensity import PolyTEOS10_bsq
 from datetime import timedelta as delta
 import numpy as np
 from numpy.random import default_rng
@@ -22,9 +22,9 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 10
+simdays = 80
 secsdt = 60 #30
-hrsoutdt = 3
+hrsoutdt = 12
 
 """functions and kernels"""
 
@@ -77,9 +77,9 @@ def Kooi(particle,fieldset,time):
     mu_n = mu_n0/med_N2cell           # conversion from [mg N m-3 d-1] to [no. m-3 d-1]
     mu_n2 = mu_n/aa                   # conversion from [no. m-3 d-1] to [d-1]
     
-    if mu_n2<0.:
-        mu_aa = 0.
-    elif mu_n2>1.85:
+    #if mu_n2<0.:
+    #    mu_aa = 0.
+    if mu_n2>1.85:
         mu_aa = 1.85/86400.           # maximum growth rate
     else:
         mu_aa = mu_n2/86400.          # conversion from d-1 to s-1

@@ -224,7 +224,7 @@ def MEDUSA(particle,fieldset,time):
     #elif R_N_Si > fiieldset.R_N_Si_max:
     #    particle.N_Si = fieldset.R_N_Si_max
     #else:
-    #    particle.N_Si = R_N_Si
+    particle.N_Si = R_N_Si
 
     #R_m = particle.N_Si*wt_N/wt_Si          # mass ratio
     #rho_bf= (1+R_m)/(1/rho_fr + R_m/rho_cy)
@@ -260,7 +260,7 @@ def MEDUSA(particle,fieldset,time):
     a_grazing = gr_aa*a                                       # [no m-2 s-1] grazing of biofilm
 
     a_linear = fieldset.mu1*a/86400.                          # linear losses [no. m-2 s-1]
-    a_non_linear = fieldset.mu2*a*a/(fieldset.kPd+a)/86400.   # non-linear losses [no. m-2 s-1]
+    a_non_linear = fieldset.mu2*a*a/(fieldset.kPd+a)/86400.   # non-linear losses [no. m-2 s-1]i - VERIFY constants!
 
     particle.a_coll = a_coll
     particle.a_growth = a_growth
@@ -534,8 +534,8 @@ def MEDUSA_detritus(particle,fieldset,time):
 
     v_bfa = (v_a*a)*theta_pl                              # volume of living biofilm [m3]
 
-    v_cy = (4./3.)*math.pi*(r_a*59./60.)**3
-    v_fr = v_a-v_cy
+    v_cy = (4./3.)*math.pi*(r_a*59./60.)**3i              # volume of cytoplasm [m3] of a single algal cell ~59/60 Miklasz & Denny 2010
+    v_fr = v_a-v_cy                                       # volume of frustule [m3]
     
     v_bfd = (v_fr*a_dead)*theta_pl                         # volume of dead biofilm [m3]
     v_tot = v_bfa + v_bfd + v_pl                           # volume of total [m3]
@@ -558,7 +558,7 @@ def MEDUSA_detritus(particle,fieldset,time):
     a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
     a_growth = mu_aa*a                                        # [no. m-2 s-1]
     if particle.depth < particle.euphz:
-        a_grazing = gr_aa*a
+        a_grazing = gr_aa*a                                   # [no. m-2 s-1]
     else:
         a_grazing = 0.
     a_linear = fieldset.mu1*a/86400.                          # linear losses [no. m-2 s-1]
@@ -672,11 +672,11 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
         mu_aa = mu_n2/86400.          # conversion from d-1 to s-1
 
     #------ Grazing -----
-    FPn = fieldset.pmPn * math.pow(particle.nd_phy,2)
-    FPd = fieldset.pmPd * math.pow(particle.d_phy,2)
-    FZmu = fieldset.pmZmu * math.pow(particle.mic_zoo,2)
-    FD = fieldset.pmD * math.pow(particle.detr,2)
-    Fm = FPn + FPd + FZmu + FD
+    FPn = fieldset.pmPn * math.pow(particle.nd_phy,2)         # (mmol N m-3)**2 Interest in available non-diatoms
+    FPd = fieldset.pmPd * math.pow(particle.d_phy,2)          # (mmol N m-3)**2 Interest in available diatoms
+    FZmu = fieldset.pmZmu * math.pow(particle.mic_zoo,2)      # (mmol N m-3)**2 Interest in available microzooplankton
+    FD = fieldset.pmD * math.pow(particle.detr,2)             # (mmol N m-3)**2 Interest in available detritus
+    Fm = FPn + FPd + FZmu + FD                                # (mmol N m-3)**2 Total available food
 
     GmPd = (fieldset.Gm * fieldset.pmPd * math.pow(particle.d_phy,2) * particle.mes_zoo)/(fieldset.km + Fm)  # [mmol N m-3 d-1]
 
@@ -702,8 +702,8 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
 
     v_bfa = (v_a*a)*theta_pl                              # volume of living biofilm [m3]
 
-    v_cy = (4./3.)*math.pi*(r_a*50./60.)**3
-    v_fr = v_a-v_cy
+    v_cy = (4./3.)*math.pi*(r_a*50./60.)**3               # volume of cytoplasm [m3] of a single algal cell ~59/60 Miklasz & Denny 2010
+    v_fr = v_a-v_cy                                       # volume of the frustule [m3]
 
     v_bfd = (v_fr*a_dead)*theta_pl                         # volume of dead biofilm [m3]
     v_tot = v_bfa + v_bfd + v_pl                           # volume of total [m3]
@@ -739,9 +739,9 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
 
     a_grazing_Si = a_grazing
     a_non_linear_Si = a_non_linear
-    a_diss = a_diss*a_dead
-    a_indirect = fieldset.D3*a_grazing_Si
-    a_direct = fieldset.D1*a_non_linear_Si
+    a_diss = a_diss*a_dead                      # [no. m-2 s-1]
+    a_indirect = fieldset.D3*a_grazing_Si       # [no. m-2 s-1]
+    a_direct = fieldset.D1*a_non_linear_Si      # [no. m-2 s-1]
     particle.a_direct = a_direct
     particle.a_indirect = a_indirect
     particle.a_diss = a_diss
@@ -857,37 +857,6 @@ def Profiles_full_grazing(particle, fieldset, time):
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
-
-
-def select_from_Cozar_random_continuous(n_particles_per_bin, bins, exponent):
-    '''
-    Create a set of particle radii by randomly drawing between given binedges from a power law distribution with given exponent.
-    '''
-    r_pls = np.zeros((len(bins)-1,n_particles_per_bin))
-    for i in range(len(bins)-1):
-        rnd = rng.random(n_particles_per_bin) #random number between 0 and 1
-        rmin, rmax = bins[i]**exponent, bins[i+1]**exponent
-        r_pls[i] = (rmin + (rmax - rmin)*rnd)**(1./exponent)
-    return r_pls
-
-def select_from_Cozar_determined(number_of_particles, e_max=-3, e_min=-6):
-    '''
-    Create a set of particle radii according to the Cozar distribution.
-
-    :param number_of_particles: Size of particleset
-    :param e_max: Exponent of the largest particle. -3 -> 1E-3 m = 1 mm
-    :param e_min: Exponent of the smallest particle. -6 -> 1E-6 = 1 um
-    '''
-
-    nbins = e_max-e_min+1
-    bins = np.logspace(e_min, e_max, nbins)
-    distribution = bins[-1]**2/(bins**2)
-    particles_per_bin = distribution/np.sum(distribution)
-    particles_per_bin = particles_per_bin.round().astype(int)
-    r_pls = []
-    for i,r in enumerate(bins):
-        r_pls += [r]*particles_per_bin[i]
-    return r_pls
 
 def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
     '''
@@ -1133,14 +1102,6 @@ if __name__ == "__main__":
         pfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05P.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05P.nc')))
         ppfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05D.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05D.nc')))
         tsfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr0+'1*d05T.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc')))
-#     elif mon == '01':
-#         yr0 = yr
-#         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05U.nc'))
-#         vfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05V.nc'))
-#         wfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05W.nc'))
-#         pfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05P.nc'))
-#         ppfiles = sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+mon+'*d05D.nc'))
-#         tsfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+mon+'*d05T.nc'))
     else:
         yr0 = yr
         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05U.nc')) 
@@ -1258,7 +1219,6 @@ if __name__ == "__main__":
     iy_max, ix_max = getclosest_ij(latvals, lonvals, maxlat+5, maxlon)
 
     indices = {'lat': range(iy_min, iy_max), 'lon': range(ix_min, ix_max)} #depth : range(0,2000)
-    print(indices['lat']) 
 
     if grazing == 'full':
         chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
@@ -1378,7 +1338,6 @@ if __name__ == "__main__":
 
     rho_pls = np.tile(920, [n_res, n_res, n_sizebins*n_particles_per_bin])
     r_pls = uniform_release(n_locs, n_particles_per_bin, n_sizebins)
-    #r_pls = select_from_Cozar_random_continuous(lon_release.size,[5e-3, 5e-4, 5e-5, 5e-6, 5e-7],-3)
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
                                  pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
@@ -1390,18 +1349,6 @@ if __name__ == "__main__":
                                  rho_pl = rho_pls,
                                  r_tot = r_pls,
                                  rho_tot = rho_pls)
-
-    #for r_pl, rho_pl in zip(r_pls[1:], rho_pls[1:]):
-    #    pset.add(ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
-    #                             pclass=plastic_particle,   # the type of particles (JITParticle or ScipyParticle)
-    #                             lon= lon_release, #-160.,  # a vector of release longitudes 
-    #                             lat= lat_release, #36., 
-    #                             time = np.datetime64('%s-%s-05' % (yr0, mon)),
-    #                             depth = z_release,
-    #                             r_pl = r_pl,
-    #                             rho_pl = rho_pl * np.ones(np.array(lon_release).size),
-    #                             r_tot = r_pl,
-    #                             rho_tot = rho_pl * np.ones(np.array(lon_release).size)))
 
 
     """ Kernal + Execution"""

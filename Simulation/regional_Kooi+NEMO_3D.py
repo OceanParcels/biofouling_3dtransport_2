@@ -216,7 +216,13 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     gr0 = GmPd
     gr1 = gr0*wt_N            # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell     # conversion to [no. m-3 s-1]
-    gr_aa = gr_n/aa           # conversion to [s-1]
+    gr_aa = gr_n/ad           # conversion to [s-1]
+
+    #------ Non-linear losses ------
+    a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
+    a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
+    a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
+    a_nlin = a_nlin_n/ad                            # conversion to [s-1]
 
     #------ N:Si ratio density ------
     R_Si_N = particle.d_si/particle.d_phy  # [(mmol N) (mmol Si)-1]
@@ -254,7 +260,7 @@ def MEDUSA_full_grazing(particle,fieldset,time):
 
     a_grazing = gr_aa*a
     a_linear = fieldset.mu1*a                                 # linear losses [no. m-2 s-1]
-    a_non_linear = fieldset.mu2*a*a/(fieldset.kPd+a)          # non-linear losses [no. m-2 s-1]
+    a_non_linear = a_nlin*a                                   # non-linear losses [no. m-2 s-1]
 
     particle.a_coll = a_coll
     particle.a_growth = a_growth
@@ -323,7 +329,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     #------ Nitrogen to cell ratios for ambient algal concentrations ('aa') and algal growth ('mu_aa') from NEMO output (no longer using N:C:AA (Redfield ratio), directly N:AA from Menden-Deuer and Lessard 2000)
     med_N2cell = 356.04e-09 # [mgN cell-1] median value is used below (as done in Kooi et al. 2017)
     wt_N = fieldset.Wt_N    # atomic weight of 1 mol of N = 14.007 g
-    wt_Si = fieldset.Wt_Si # atomic weight of 1 mor of Si = 28.0855
+    wt_Si = fieldset.Wt_Si  # atomic weight of 1 mol of Si = 28.0855 g
 
     #------ Ambient algal concentration from MEDUSA's non-diatom + diatom phytoplankton
     n0 = particle.nd_phy+particle.d_phy # [mmol N m-3] total plankton concentration engaging in primary production in MEDUSA
@@ -365,9 +371,15 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     GmPd = (fieldset.Gm * fieldset.pmPd * math.pow(particle.d_phy,2) * particle.mes_zoo)/(fieldset.km + Fm)  # [mmol N m-3 s-1]
 
     gr0 = GmPd
-    gr1 = gr0*wt_N            # conversion to [mg N m-3 s-1]
+    gr1 = gr0*wt_N              # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell       # conversion to [no. m-3 s-1]
-    gr_aa = gr_n/aa               # conversion to [s-1]
+    gr_aa = gr_n/ad             # conversion to [s-1]
+
+    #------ Non-linear losses ------
+    a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
+    a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
+    a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
+    a_nlin = a_nlin_n/ad                            # conversion to [s-1]
 
     #------ N:Si ratio density ------
     R_Si_N = particle.d_si/particle.d_dph  # [(mmol N)-1 (mmol Si)]
@@ -408,9 +420,9 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
     a_growth = mu_aa*a                                        # [no. m-2 s-1]
 
-    a_grazing = gr_aa*a
+    a_grazing = gr_aa*a                                       # grazing losses [no. m-2 s-1]
     a_linear = fieldset.mu1*a                                 # linear losses [no. m-2 s-1] eq 67 Yool et al. 2013
-    a_non_linear = fieldset.mu2*a*a/(fieldset.kPd+a)          # non-linear losses [no. m-2 s-1] eq 72 Yool et al. 2013
+    a_non_linear = a_nlin*a                                   # non-linear losses [no. m-2 s-1] eq 72 Yool et al. 2013
 
     particle.a_coll = a_coll
     particle.a_growth = a_growth
@@ -419,11 +431,9 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     particle.a_nl = a_non_linear
     particle.a += (a_coll + a_growth - a_grazing - a_linear - a_non_linear) * particle.dt
 
-    a_grazing_Si = R_Si_N*a_grazing             # check units  
-    a_non_linear_Si = R_Si_N*a_non_linear       # check units
-    a_diss = a_diss*a_dead                      # [no. m-2 s-1]
-    a_indirect = fieldset.D3*a_grazing_Si       # [no. m-2 s-1]
-    a_direct = fieldset.D1*a_non_linear_Si      # [no. m-2 s-1]
+    a_diss = a_diss*a_dead                     # [no. m-2 s-1]
+    a_indirect = fieldset.D3*a_grazing         # [no. m-2 s-1]
+    a_direct = fieldset.D1*a_non_linear        # [no. m-2 s-1]
     particle.a_direct = a_direct
     particle.a_indirect = a_indirect
     particle.a_diss = a_diss

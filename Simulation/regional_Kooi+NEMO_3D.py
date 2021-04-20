@@ -216,7 +216,7 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     gr0 = GmPd
     gr1 = gr0*wt_N            # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell     # conversion to [no. m-3 s-1]
-    gr_aa = gr_n/ad           # conversion to [s-1]
+    gr_ad = gr_n/ad           # conversion to [s-1]
 
     #------ Non-linear losses ------
     a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
@@ -258,7 +258,7 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
     a_growth = mu_aa*a
 
-    a_grazing = gr_aa*a
+    a_grazing = gr_ad*a
     a_linear = fieldset.mu1*a                                 # linear losses [no. m-2 s-1]
     a_non_linear = a_nlin*a                                   # non-linear losses [no. m-2 s-1]
 
@@ -373,7 +373,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     gr0 = GmPd
     gr1 = gr0*wt_N              # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell       # conversion to [no. m-3 s-1]
-    gr_aa = gr_n/ad             # conversion to [s-1]
+    gr_ad = gr_n/ad             # conversion to [s-1]
 
     #------ Non-linear losses ------
     a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
@@ -382,7 +382,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     a_nlin = a_nlin_n/ad                            # conversion to [s-1]
 
     #------ N:Si ratio density ------
-    R_Si_N = particle.d_si/particle.d_dph  # [(mmol N)-1 (mmol Si)]
+    R_Si_N = particle.d_si/particle.d_phy  # [(mmol N)-1 (mmol Si)]
 
     particle.Si_N = R_Si_N
 
@@ -420,7 +420,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
     a_growth = mu_aa*a                                        # [no. m-2 s-1]
 
-    a_grazing = gr_aa*a                                       # grazing losses [no. m-2 s-1]
+    a_grazing = gr_ad*a                                       # grazing losses [no. m-2 s-1]
     a_linear = fieldset.mu1*a                                 # linear losses [no. m-2 s-1] eq 67 Yool et al. 2013
     a_non_linear = a_nlin*a                                   # non-linear losses [no. m-2 s-1] eq 72 Yool et al. 2013
 

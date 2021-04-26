@@ -21,7 +21,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 2
+simdays = 80
 secsdt = 60 #30
 hrsoutdt = 6
 
@@ -530,6 +530,11 @@ def Profiles(particle, fieldset, time):
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
+    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
 
 def Profiles_full_grazing(particle, fieldset, time):
     particle.temp = fieldset.cons_temperature[time, particle.depth,particle.lat,particle.lon]
@@ -549,6 +554,12 @@ def Profiles_full_grazing(particle, fieldset, time):
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
+    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
+
 
 def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
     '''
@@ -568,8 +579,6 @@ def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
 
 
 def vertical_mixing_random_constant(particle, fieldset, time):
-    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
-    particle.mld = particle.depth/mld
     if particle.mld < 1:
         vmax = 0.02                                # [m/s] Maximum velocity
         particle.w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
@@ -580,9 +589,6 @@ def vertical_mixing_random_constant(particle, fieldset, time):
             particle.depth = z_0
     else:
         particle.w_m = 0
-
-def mixed_layer(particle, fieldset, time):
-    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
 
 def markov_0_KPP_reflect(particle, fieldset, time):
     """
@@ -598,11 +604,7 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     vk = fieldset.Vk
 
     rho_sw = particle.density
-    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
-    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
-    particle.mld = particle.depth/mld
-    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
-
+ 
     # Define KPP profile from tau and mld
     u_s_a =  math.sqrt(particle.tau/rho_a)
     u_s_w = math.sqrt(particle.tau/rho_sw)
@@ -648,9 +650,6 @@ def tidal_diffusivity(particle, fieldset, time):
     Author: Victor Onink
     Adapted 1D -> 3D
     """
-    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
-    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
-
     dK_z = particle.dK_z_t
     K_z = particle.K_z_t
 
@@ -804,103 +803,69 @@ if __name__ == "__main__":
         tsfiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc')) 
         
     mesh_mask = dirread_mesh+'coordinates.nc'
-    if grazing == 'full':
-        filenames = {'U': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ufiles}, #'depth': wfiles,
+    pfile_key = {'lon': mesh_mask, 'lat': mesh_mask, 'depth':wfiles[0], 'data':pfiles}
+    ppfile_key = {'lon': mesh_mask, 'lat': mesh_mask, 'depth':wfiles[0], 'data':ppfiles}
+    tsfile_key = {'lon': mesh_mask, 'lat': mesh_mask, 'depth':wfiles[0], 'data':tsfiles}
+    
+    filenames = {'U': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ufiles}, #'depth': wfiles,
                  'V': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': vfiles},
                  'W': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': wfiles},
-                 'd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'nd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
-                 'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'taum': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'w_10': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'euph_z': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
-                 'mic_zoo': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'mes_zoo': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},   
-                 'detr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'Di_Si': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles}}
+                 'd_phy': pfile_key,
+                 'nd_phy': pfile_key,
+                 'tpp3': ppfile_key,
+                 'cons_temperature': tsfile_key,
+                 'abs_salinity': tsfile_key,
+                 'mldr': tsfile_key,
+                 'taum': tsfile_key,
+                 'w_10': tsfile_key,
+                 'euph_z': ppfile_key,
+                 'Di_Si': pfile_key}
 
-        variables = {'U': 'uo',
+    variables = {'U': 'uo',
                  'V': 'vo',
-                 'W': 'wo', 
-                 'd_phy': 'PHD',                # units: mmolN/m3
-                 'nd_phy': 'PHN',               # units: mmolN/m3
-                 'tpp3': 'TPP3',                # units: mmolN/m3/d 
+                 'W': 'wo',
+                 'd_phy': 'PHD',
+                 'nd_phy': 'PHN',
+                 'tpp3': 'TPP3', # units: mmolN/m3/d
                  'cons_temperature': 'potemp',
                  'abs_salinity': 'salin',
                  'mldr': 'mldr10_1',
                  'taum': 'taum',
                  'w_10': 'sowindsp',
-                 'euph_z': 'MED_XZE',           # units: m
-                 'mic_zoo': 'ZMI',              # units: mmolN/m3
-                 'mes_zoo': 'ZME',              # units: mmolN/m3
-                 'detr': 'DET',                 # units: mmolN/m3
-                 'Di_Si': 'PDS'}                # units: mmolSi/m3
+                 'euph_z': 'MED_XZE',
+                 'Di_Si': 'PDS'}
 
-        dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}, #time_centered
-                  'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
-                  'W': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
-                  'd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'nd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
-                  'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                  'taum': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                  'w_10': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                  'euph_z': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'},
-                  'mic_zoo': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'mes_zoo': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'detr': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                  'Di_Si': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'}}
-    
-    else:
-            filenames = {'U': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ufiles}, #'depth': wfiles,
-                 'V': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': vfiles},
-                 'W': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': wfiles},
-                 'd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'nd_phy': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles},
-                 'tpp3': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
-                 'cons_temperature': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'abs_salinity': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'mldr': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'taum': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'w_10': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': tsfiles},
-                 'euph_z': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
-                 'grazing': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': ppfiles},
-                 'Di_Si': {'lon': mesh_mask, 'lat': mesh_mask, 'depth': wfiles[0], 'data': pfiles}}
+    dimkey_2d = {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'}
+    dimkey_3d =  {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}
+    dimensions = {'U': dimkey_3d, #time_centered
+                  'V': dimkey_3d,
+                  'W': dimkey_3d,
+                  'd_phy': dimkey_3d,
+                  'nd_phy': dimkey_3d,
+                  'tpp3': dimkey_3d,
+                  'cons_temperature': dimkey_3d,
+                  'abs_salinity': dimkey_3d,
+                  'mldr': dimkey_2d,
+                  'taum': dimkey_2d,
+                  'w_10': dimkey_2d,
+                  'euph_z': dimkey_2d,
+                  'Di_Si': dimkey_2d}
 
-            variables = {'U': 'uo',
-                         'V': 'vo',
-                         'W': 'wo',
-                         'd_phy': 'PHD',
-                         'nd_phy': 'PHN',
-                         'tpp3': 'TPP3', # units: mmolN/m3/d
-                         'cons_temperature': 'potemp',
-                         'abs_salinity': 'salin',
-                         'mldr': 'mldr10_1',
-                         'taum': 'taum',
-                         'w_10': 'sowindsp',
-                         'euph_z': 'MED_XZE',
-                         'grazing': 'GMEPD',
-                         'Di_Si': 'PDS'}
+    if grazing == 'full':
+        extra_files = {'mic_zoo': pfile_key,
+                       'mes_zoo': pfile_key,
+                       'detr': pfile_key}
+        filenames.update(extra_files)
 
-            dimensions = {'U': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'}, #time_centered
-                          'V': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
-                          'W': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw', 'time': 'time_counter'},
-                          'd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                          'nd_phy': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                          'tpp3': {'lon': 'glamf', 'lat': 'gphif','depth': 'depthw', 'time': 'time_counter'},
-                          'cons_temperature': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                          'abs_salinity': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
-                          'mldr': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                          'taum': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                          'w_10': {'lon': 'glamf', 'lat': 'gphif', 'time': 'time_counter'},
-                          'euph_z': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'},
-                          'grazing': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'},
-                          'Di_Si': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'}}
+        extra_vars = {'mic_zoo': 'ZMI',
+                       'mes_zoo': 'ZME',
+                       'detr': 'DET'}
+        variables.update(extra_vars)
+
+        extra_dims = {'mic_zoo': dimkey_3d,
+                       'mes_zoo': dimkey_3d,
+                       'detr': dimkey_3d}
+        dimensions.update(extra_dims)
 
     initialgrid_mask = dirread+'ORCA0083-N06_20070105d05U.nc'
     mask = xr.open_dataset(initialgrid_mask, decode_times=False)
@@ -911,39 +876,29 @@ if __name__ == "__main__":
     iy_max, ix_max = getclosest_ij(latvals, lonvals, maxlat+5, maxlon)
 
     indices = {'lat': range(iy_min, iy_max), 'lon': range(ix_min, ix_max)} #depth : range(0,2000)
-
+    
+    chs_t = {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
+    chs_2d =  {'time': ('time_counter', 1), 'lat': ('y', 200), 'lon': ('x', 200)}
+    
+    chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'd_phy': chs_t,
+           'nd_phy': chs_t,
+           'tpp3': chs_t,
+           'cons_temperature': chs_t,
+           'abs_salinity': chs_t,
+           'mldr': chs_t,
+           'taum': chs_t,
+           'w_10': chs_t,
+           'euph_z': chs_t,
+           'Di_Si': chs_t}
     if grazing == 'full':
-        chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'taum': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'w_10': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'euph_z': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'mic_zoo': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'mes_zoo': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'detr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'Di_Si': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)}}        
-    else:
-        chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'taum': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'w_10': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'euph_z': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'grazing': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'Di_Si': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)}}
+        extra_chs = {'mic_zoo':chs_t,
+                     'mes_zoo':chs_t,
+                     'detr':chs_t}
+        chs.update(extra_chs)
+
     fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices)
 
     if bg_mixing == 'tidal':
@@ -1055,13 +1010,17 @@ if __name__ == "__main__":
         s = 'SON'
     elif mon=='01':
         s = 'Jan'
-    
+
+    if grazing == 'full':
+        kernels = pset.Kernel(Profiles_full_grazing)
+    else:
+        kernels = pset.Kernel(Profiles)    
     if no_advection == 'True':
         proc = 'bfnoadv'
-        kernels = pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq)
+        kernels += pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq)
     elif no_advection == 'False':
         proc = 'bfadv'
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
+        kernels += pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
     else:
         print(no_advection+' is not a correct argument')
         
@@ -1089,7 +1048,7 @@ if __name__ == "__main__":
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(1.))

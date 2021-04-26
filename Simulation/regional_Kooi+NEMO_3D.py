@@ -530,6 +530,11 @@ def Profiles(particle, fieldset, time):
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
+    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
 
 def Profiles_full_grazing(particle, fieldset, time):
     particle.temp = fieldset.cons_temperature[time, particle.depth,particle.lat,particle.lon]
@@ -549,6 +554,12 @@ def Profiles_full_grazing(particle, fieldset, time):
     particle.sw_visc = mu_w*(1 + A*S_sw + B*S_sw**2)
     particle.kin_visc = particle.sw_visc/particle.density
     particle.w_adv = fieldset.W[time,particle.depth,particle.lat,particle.lon]
+    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
+    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
+    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
+    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
+    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
+
 
 def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
     '''
@@ -568,8 +579,6 @@ def uniform_release(n_locs, n_particles_per_bin, n_bins, e_max=-3, e_min=-5):
 
 
 def vertical_mixing_random_constant(particle, fieldset, time):
-    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
-    particle.mld = particle.depth/mld
     if particle.mld < 1:
         vmax = 0.02                                # [m/s] Maximum velocity
         particle.w_m = vmax*2*(ParcelsRandom.random()-0.5)  # [m/s] vertical mixing velocity
@@ -580,9 +589,6 @@ def vertical_mixing_random_constant(particle, fieldset, time):
             particle.depth = z_0
     else:
         particle.w_m = 0
-
-def mixed_layer(particle, fieldset, time):
-    particle.mld = particle.depth/fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
 
 def markov_0_KPP_reflect(particle, fieldset, time):
     """
@@ -598,11 +604,7 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     vk = fieldset.Vk
 
     rho_sw = particle.density
-    mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
-    particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
-    particle.mld = particle.depth/mld
-    particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
-
+ 
     # Define KPP profile from tau and mld
     u_s_a =  math.sqrt(particle.tau/rho_a)
     u_s_w = math.sqrt(particle.tau/rho_sw)
@@ -648,9 +650,6 @@ def tidal_diffusivity(particle, fieldset, time):
     Author: Victor Onink
     Adapted 1D -> 3D
     """
-    particle.dK_z_t = fieldset.dKzdz[time, particle.depth, particle.lat, particle.lon]
-    particle.K_z_t = fieldset.Kz[time, particle.depth, particle.lat, particle.lon]
-
     dK_z = particle.dK_z_t
     K_z = particle.K_z_t
 
@@ -880,24 +879,7 @@ if __name__ == "__main__":
     
     chs_t = {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
     chs_2d =  {'time': ('time_counter', 1), 'lat': ('y', 200), 'lon': ('x', 200)}
-    if grazing == 'full':
-        chs = {'U':  {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'taum': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'w_10': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
-           'euph_z': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'mic_zoo': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'mes_zoo': {'time': ('time_counr', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'detr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
-           'Di_Si': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)}}        
-
+    
     chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
            'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
@@ -906,10 +888,10 @@ if __name__ == "__main__":
            'tpp3': chs_t,
            'cons_temperature': chs_t,
            'abs_salinity': chs_t,
-           'mldr': chs_2d,
-           'taum': chs_2d,
-           'w_10': chs_2d,
-           'euph_z': chs_2d,
+           'mldr': chs_t,
+           'taum': chs_t,
+           'w_10': chs_t,
+           'euph_z': chs_t,
            'Di_Si': chs_t}
     if grazing == 'full':
         extra_chs = {'mic_zoo':chs_t,
@@ -932,7 +914,7 @@ if __name__ == "__main__":
     fieldset.add_constant('Gr_a', 0.39 / 86400.)
     fieldset.add_constant('collision_eff', 1.)
     fieldset.add_constant('K', 1.0306E-13 / (86400. ** 2.))  # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
-    fieldset.add_constant('Rho_bf', 1250.)                   # density of biofilm [g m-3]
+    fieldset.add_constant('Rho_bf', 1388.)                   # density of biofilm [g m-3]
     fieldset.add_constant('Rho_fr', 1800.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('Rho_cy', 1065.)                   # density of cytoplasm [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('V_a', 2.0E-16)                    # Volume of 1 algal cell [m-3]
@@ -1028,13 +1010,17 @@ if __name__ == "__main__":
         s = 'SON'
     elif mon=='01':
         s = 'Jan'
-    
+
+    if grazing == 'full':
+        kernels = pset.Kernel(Profiles_full_grazing)
+    else:
+        kernels = pset.Kernel(Profiles)    
     if no_advection == 'True':
         proc = 'bfnoadv'
-        kernels = pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq)
+        kernels += pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq)
     elif no_advection == 'False':
         proc = 'bfadv'
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
+        kernels += pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
     else:
         print(no_advection+' is not a correct argument')
         
@@ -1062,7 +1048,7 @@ if __name__ == "__main__":
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(fieldset.Rho_bf)+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(1.))

@@ -6,7 +6,7 @@
 #$ -M r.p.b.fischer@uu.nl
 #$ -m e
 #$ -l h_vmem=30G
-#$ -l h_rt=8:00:00
+#$ -l h_rt=4:00:00
 #$ -q long.q
 
 echo 'Start Simulation'

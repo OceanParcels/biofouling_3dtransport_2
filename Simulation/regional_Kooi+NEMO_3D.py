@@ -21,7 +21,7 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 2
+simdays = 90
 secsdt = 60 #30
 hrsoutdt = 6
 
@@ -219,7 +219,7 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     gr_ad = gr_n/ad           # conversion to [s-1]
 
     #------ Non-linear losses ------
-    a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
+    a_nlin0 = fieldset.mu2*particle.d_phy*particle.d_phy/(fieldset.kPd+particle.d_phy)  # ambient diatom non-linear losses [mmol N m-3 s-1]
     a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
     a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
     a_nlin = a_nlin_n/ad                            # conversion to [s-1]
@@ -376,7 +376,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     gr_ad = gr_n/ad             # conversion to [s-1]
 
     #------ Non-linear losses ------
-    a_nlin0 = fieldset.mu2*ad*ad/(fieldset.kPd+ad)  # ambient diatom non-linear losses [mmol N m-3 s-1]
+    a_nlin0 = fieldset.mu2*particle.d_phy*particle.d_phy/(fieldset.kPd+particle.d_phy)  # ambient diatom non-linear losses [mmol N m-3 s-1]
     a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
     a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
     a_nlin = a_nlin_n/ad                            # conversion to [s-1]
@@ -960,7 +960,7 @@ if __name__ == "__main__":
     fieldset.add_constant('collision_eff', 1.)
     fieldset.add_constant('K', 1.0306E-13 / (86400. ** 2.))  # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
     fieldset.add_constant('Rho_bf', 1388.)                   # density of biofilm [g m-3]
-    fieldset.add_constant('Rho_fr', 1800.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
+    fieldset.add_constant('Rho_fr', 2200.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('Rho_cy', 1065.)                   # density of cytoplasm [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('V_a', 2.0E-16)                    # Volume of 1 algal cell [m-3]
     fieldset.add_constant('R20', 0.1 / 86400.)               # respiration rate, now [s-1]
@@ -1058,10 +1058,10 @@ if __name__ == "__main__":
     
     if no_advection == 'True':
         proc = 'bfnoadv'
-        kernels = pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq)
+        kernels = pset.Kernel(PolyTEOS10_bsq)+ pset.Kernel(Profiles_full_grazing) +pset.Kernel(AdvectionRK4_3D_vert) + pset.Kernel(periodicBC)
     elif no_advection == 'False':
         proc = 'bfadv'
-        kernels = pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) +  pset.Kernel(PolyTEOS10_bsq) 
+        kernels = pset.Kernel(PolyTEOS10_bsq)+ pset.Kernel(Profiles_full_grazing) + pset.Kernel(AdvectionRK4_3D) + pset.Kernel(periodicBC) 
     else:
         print(no_advection+' is not a correct argument')
         
@@ -1076,20 +1076,17 @@ if __name__ == "__main__":
         kernels += pset.Kernel(tidal_diffusivity)
 
     if diatom_death == 'NEMO' and grazing == 'full':
-        kernels += pset.Kernel(Profiles_full_grazing) + pset.Kernel(MEDUSA_full_grazing)
-    elif diatom_death == 'NEMO':
-        kernels += pset.Kernel(Profiles) + pset.Kernel(MEDUSA)
+        kernels += pset.Kernel(MEDUSA_full_grazing)
     elif diatom_death =='NEMO_detritus' and grazing == 'full':
-        kernels += pset.Kernel(Profiles_full_grazing) + pset.Kernel(MEDUSA_detritus_full_grazing)
-    elif diatom_death == 'NEMO_detritus':
-        kernels += pset.Kernel(Profiles) + pset.Kernel(MEDUSA_detritus)
+        kernels += pset.Kernel(MEDUSA_detritus_full_grazing)
     else:
-        kernels += pset.Kernel(Profiles) + pset.Kernel(Kooi) 
+        kernels += pset.Kernel(Kooi) 
 
     if system == 'cartesius':
         outfile = '/scratch-local/rfischer/Kooi_data/data_output/allrho/res_'+res+'/allr/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_3D_grid'+res+'_allrho_allr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+diatom_death+'_'+str(bg_mixing)+'mixing_'+grazing+'_grazing_'+str(dissolution)[2:]+'diss_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(fieldset.Rho_fr))+'rhofr_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
     pfile.add_metadata('collision efficiency', str(1.))

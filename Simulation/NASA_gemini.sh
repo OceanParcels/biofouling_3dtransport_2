@@ -2,7 +2,7 @@
 # SGE Options
 #$ -S /bin/bash
 #$ -V
-#$ -N NASA_SO
+#$ -N NASA_EqPac
 #$ -M r.p.b.fischer@uu.nl
 #$ -m e
 #$ -l h_vmem=30G

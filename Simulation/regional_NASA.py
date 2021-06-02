@@ -13,7 +13,7 @@ ParcelsRandom.seed(seed)
 simdays = 90
 secsdt = 60 #30
 hrsoutdt = 6
-region = 'SO'
+region = 'EqPac'
 yr = '2004'
 mon ='01'
 
@@ -198,7 +198,10 @@ def NASA_GISS(particle,fieldset,time):
     #------ Primary productivity (algal growth) from MEDUSA TPP3 (no longer condition of only above euphotic zone, since not much diff in results)
     a_gro = particle.Gro              # [mg chl m-3 s-1]
     mu_n = a_gro/med_chlcell          # conversion from [mg chl m-3 s-1] to [no. m-3 s-1]
-    mu_n2 = mu_n/ad                   # conversion from [no. m-3 s-1] to [s-1]
+    if ad>0:
+        mu_n2 = mu_n/ad                   # conversion from [no. m-3 s-1] to [s-1]
+    else:
+        mu_n2 = 0.
 
     if mu_n2<0.:
         mu_ad = 0.
@@ -210,22 +213,34 @@ def NASA_GISS(particle,fieldset,time):
     #------ Grazing -----
     gr0 = particle.Graz         # [mg chl m-3 s-1]
     gr_n = gr0/med_chlcell      # conversion to [no. m-3 s-1]
-    gr_ad = gr_n/ad             # conversion to [s-1]
-    
+    if ad>0:
+        gr_ad = gr_n/ad             # conversion to [s-1]
+    else:
+        gr_ad = 0.
+
     #------ Senesence -----
     s0 = particle.Sen          # [mg chl m-3 s-1]
     s_n = s0/med_chlcell       # conversion to [no. m-3 s-1]
-    s_ad = s_n/ad              # conversion to [s-1]
-    
+    if ad>0:
+        s_ad = s_n/ad              # conversion to [s-1]
+    else:
+        s_ad=0.
+
     #------ Respiration -----
     resp0 = particle.Resp         # [mg chl m-3 s-1]
     resp_n = resp0/med_chlcell    # conversion to [no. m-3 s-1]
-    resp_ad = resp_n/ad           # conversion to [s-1]
-    
+    if ad>0:
+        resp_ad = resp_n/ad           # conversion to [s-1]
+    else:
+        resp_ad = 0.
+
     #------ DOC -----
     doc0 = particle.Doc         # [mg chl m-3 s-1]
     doc_n = doc0/med_chlcell    # conversion to [no. m-3 s-1]
-    doc_ad = doc_n/ad           # conversion to [s-1]
+    if ad>0:
+        doc_ad = doc_n/ad           # conversion to [s-1]
+    else:
+        doc_ad = 0.
 
     #------ Density -----
     rho_bf = fieldset.Rho_bf

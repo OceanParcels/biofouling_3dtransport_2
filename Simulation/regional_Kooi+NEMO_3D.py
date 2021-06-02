@@ -21,9 +21,9 @@ ParcelsRandom.seed(seed)
 rng = default_rng(seed)
 
 #------ Choose ------:
-simdays = 90
+simdays = 180
 secsdt = 60 #30
-hrsoutdt = 6
+hrsoutdt = 12
 
 """functions and kernels"""
 
@@ -351,7 +351,10 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     tpp0 = particle.tpp3              # [mmol N m-3 d-1]
     mu_n0 = tpp0*wt_N                 # conversion from [mmol N m-3 d-1] to [mg N m-3 d-1] (atomic weight of 1 mol of N = 14.007 g)
     mu_n = mu_n0/med_N2cell           # conversion from [mg N m-3 d-1] to [no. m-3 d-1]
-    mu_n2 = mu_n/aa                   # conversion from [no. m-3 d-1] to [d-1]
+    if aa>0:
+        mu_n2 = mu_n/aa                   # conversion from [no. m-3 d-1] to [d-1]
+    else:
+        mu_n2=0.
 
     if mu_n2<0.:
         mu_aa = 0.
@@ -373,13 +376,19 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     gr0 = GmPd
     gr1 = gr0*wt_N              # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell       # conversion to [no. m-3 s-1]
-    gr_ad = gr_n/ad             # conversion to [s-1]
+    if ad>0:
+        gr_ad = gr_n/ad             # conversion to [s-1]
+    else:
+        gr_ad = 0.
 
     #------ Non-linear losses ------
     a_nlin0 = fieldset.mu2*particle.d_phy*particle.d_phy/(fieldset.kPd+particle.d_phy)  # ambient diatom non-linear losses [mmol N m-3 s-1]
     a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
     a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
-    a_nlin = a_nlin_n/ad                            # conversion to [s-1]
+    if ad>0:
+        a_nlin = a_nlin_n/ad                            # conversion to [s-1]
+    else:
+        a_nlin = 0.
 
     #------ N:Si ratio density ------
     R_Si_N = particle.d_si/particle.d_phy  # [(mmol N)-1 (mmol Si)]
@@ -442,6 +451,7 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
 
     dn = 2. * (r_tot)                             # equivalent spherical diameter [m]
     delta_rho = (rho_tot - rho_sw)/rho_sw         # normalised difference in density between total plastic+bf and seawater[-]
+   
     dstar = ((rho_tot - rho_sw) * g * dn**3.)/(rho_sw * kin_visc**2.) # [-]
 
     if dstar > 5e9:
@@ -461,10 +471,10 @@ def MEDUSA_detritus_full_grazing(particle,fieldset,time):
     particle.vs_init = vs
 
     z0 = z + vs * particle.dt
-    if z0 <=0.6 or z0 >= 4000.: # NEMO's 'surface depth'
+    if z0 <=0.6: # NEMO's 'surface depth'
         vs = 0
         particle.depth = 0.6
-    else:
+    elif z0 > 0:
         particle.depth += vs * particle.dt
 
     particle.vs = vs
@@ -605,7 +615,8 @@ def markov_0_KPP_reflect(particle, fieldset, time):
 
     # Define KPP profile from tau and mld
     u_s_a =  math.sqrt(particle.tau/rho_a)
-    u_s_w = math.sqrt(particle.tau/rho_sw)
+    u_s_w =  math.sqrt(particle.tau/rho_sw)
+   
     alpha_dt = (vk * u_s_w) / (phi * mld ** 2)
     alpha = (vk * u_s_w) / phi
 
@@ -616,7 +627,7 @@ def markov_0_KPP_reflect(particle, fieldset, time):
         dK_z_p = alpha_dt * (mld - particle.depth) * (mld -3 * particle.depth -2 * z0)
     else:
         dK_z_p = 0
-    
+
     particle.KPP = alpha * (particle.depth + 0.5 * dK_z_p * particle.dt +z0) * math.pow(1 - (particle.depth + 0.5 * dK_z_p * particle.dt)/ mld, 2)
     if particle.mld<1:
         K_z = particle.KPP
@@ -638,9 +649,10 @@ def markov_0_KPP_reflect(particle, fieldset, time):
     potential = particle.depth + w_m_step
     if potential < 0.6:
         particle.depth = 0.6 + (0.6 - potential)
-    else:
+    elif potential > 0:
         particle.depth = potential
-
+    else:
+        print('Diffusion error with wm = '+str(particle.w_m))
 
 def tidal_diffusivity(particle, fieldset, time):
     """
@@ -668,8 +680,10 @@ def tidal_diffusivity(particle, fieldset, time):
     potential = particle.depth + w_t_step
     if potential < 0.6:
         particle.depth = 0.6 + (0.6 - potential)
-    else:
+    elif potential > 0.6 and potential<4000:
         particle.depth = potential
+    else:
+        print('potential error at depth = '+str(particle.depth))
 
 """ Defining the particle class """
 
@@ -707,7 +721,7 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     rho_tot = Variable('rho_tot',dtype=np.float32,to_write=False) 
     r_tot = Variable('r_tot',dtype=np.float32,to_write=True)
     delta_rho = Variable('delta_rho',dtype=np.float32,to_write=True)
-    rho_bf = Variable('rho_bf',dtype=np.float32,to_write=False)
+    rho_bf = Variable('rho_bf',dtype=np.float32,to_write='once')
     vs_init = Variable('vs_init',dtype=np.float32,to_write=True)
     KPP = Variable('KPP', dtype=np.float32, to_write=False)
     K_z_t = Variable('K_z_t', dtype=np.float32, to_write=False)
@@ -758,22 +772,37 @@ if __name__ == "__main__":
     # CHOOSE
 
     #------ Fieldset grid  ------
-    if region == 'NPSG':
-        minlat = 20 
-        maxlat = 45 
+    if region == 'NPSG' and no_advection == 'False':
+        minlat = -10 
+        maxlat = 70 
         minlon = 110 # -180 #75 
-        maxlon = -120 #45   
-    elif region == 'EqPac':
-        minlat = -20 
-        maxlat = 20
-        minlon = 160
+        maxlon = -100 #45   
+    elif region == 'NPSG':
+        minlat = 27
+        maxlat = 37
+        minlon = -144
+        maxlon = -134
+    elif region == 'EqPac' and no_advection == 'False':
+        minlat = -40 
+        maxlat = 40
+        minlon = 110
         maxlon = -120
-    elif region == 'SO':
+    elif region == 'EqPac':
+        minlat = -5
+        maxlat = 5
+        minlon = -149
+        maxlon = -139
+    elif region == 'SO' and no_advection == 'False':
         minlat = -75
-        maxlat = -45
-        minlon = -15
-        maxlon = 25
-    
+        maxlat = -25
+        minlon = -40
+        maxlon = 70
+    elif region == 'SO':
+        minlat= -66
+        maxlat = -54
+        minlon = -11
+        maxlon = 1
+
     """ Defining the fieldset""" 
     if system == 'cartesius':
         dirread = '/projects/0/topios/hydrodynamic_data/NEMO-MEDUSA/ORCA0083-N006/means/'
@@ -794,6 +823,15 @@ if __name__ == "__main__":
         pfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05P.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05P.nc')))
         ppfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr0+'1*d05D.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05D.nc')))
         tsfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr0+'1*d05T.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc')))
+    elif mon == '09':
+        yr1 = str(int(yr)+1)
+        yr0 = yr
+        ufiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05U.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr1+'0*d05U.nc')))
+        vfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05V.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr1+'0*d05V.nc')))
+        wfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05W.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr1+'0*d05W.nc')))
+        pfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05P.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr1+'0*d05P.nc')))
+        ppfiles = (sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr+'*d05D.nc'))+ sorted(glob(dirread_bgc+'ORCA0083-N06_'+yr1+'0*d05D.nc')))
+        tsfiles = (sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05T.nc'))+ sorted(glob(dirread+'ORCA0083-N06_'+yr1+'0*d05T.nc')))
     else:
         yr0 = yr
         ufiles = sorted(glob(dirread+'ORCA0083-N06_'+yr+'*d05U.nc')) 
@@ -907,8 +945,8 @@ if __name__ == "__main__":
     Lat, Lon = mask.variables['nav_lat'], mask.variables['nav_lon']
     latvals = Lat[:]; lonvals = Lon[:] # extract lat/lon values to numpy arrays
                                                                                                
-    iy_min, ix_min = getclosest_ij(latvals, lonvals, minlat-5, minlon)
-    iy_max, ix_max = getclosest_ij(latvals, lonvals, maxlat+5, maxlon)
+    iy_min, ix_min = getclosest_ij(latvals, lonvals, minlat, minlon)
+    iy_max, ix_max = getclosest_ij(latvals, lonvals, maxlat, maxlon)
 
     indices = {'lat': range(iy_min, iy_max), 'lon': range(ix_min, ix_max)} #depth : range(0,2000)
 
@@ -960,7 +998,7 @@ if __name__ == "__main__":
     fieldset.add_constant('collision_eff', 1.)
     fieldset.add_constant('K', 1.0306E-13 / (86400. ** 2.))  # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
     fieldset.add_constant('Rho_bf', 1388.)                   # density of biofilm [g m-3]
-    fieldset.add_constant('Rho_fr', 2200.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
+    fieldset.add_constant('Rho_fr', 1800.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('Rho_cy', 1065.)                   # density of cytoplasm [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('V_a', 2.0E-16)                    # Volume of 1 algal cell [m-3]
     fieldset.add_constant('R20', 0.1 / 86400.)               # respiration rate, now [s-1]

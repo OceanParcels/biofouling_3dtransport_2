@@ -2,7 +2,7 @@
 # SGE Options
 #$ -S /bin/bash
 #$ -V
-#$ -N regional_EqPac
+#$ -N regional_NPSG
 #$ -M r.p.b.fischer@uu.nl
 #$ -m e
 #$ -l h_vmem=30G
@@ -11,4 +11,4 @@
 
 echo 'Start Simulation'
 cd ${HOME}/biofouling_3dtransport_2/Simulation/
-python3 regional_Kooi+NEMO_3D.py -mon=01 -yr=2004 -region='EqPac' -dissolution='0.006' -mixing='markov_0_KPP_reflect' -grazing='full' -system='gemini' -bg_mixing='tidal' -diatom_death='NEMO_detritus' -no_advection='True'
+python3 regional_Kooi+NEMO_3D.py -mon=01 -yr=2004 -region='NPSG' -dissolution='0.006' -mixing='markov_0_KPP_reflect' -grazing='full' -system='gemini' -bg_mixing='tidal' -diatom_death='NEMO_detritus' -no_advection='True'

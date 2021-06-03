@@ -786,7 +786,7 @@ if __name__ == "__main__":
         minlat = -40 
         maxlat = 40
         minlon = 110
-        maxlon = -120
+        maxlon = -100
     elif region == 'EqPac':
         minlat = -5
         maxlat = 5

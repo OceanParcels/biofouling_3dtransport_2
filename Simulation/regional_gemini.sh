@@ -5,10 +5,10 @@
 #$ -N regional_NPSG
 #$ -M r.p.b.fischer@uu.nl
 #$ -m e
-#$ -l h_vmem=30G
-#$ -l h_rt=8:00:00
+#$ -l h_vmem=20G
+#$ -l h_rt=18:00:00
 #$ -q long.q
 
 echo 'Start Simulation'
 cd ${HOME}/biofouling_3dtransport_2/Simulation/
-python3 regional_Kooi+NEMO_3D.py -mon=01 -yr=2004 -region='NPSG' -dissolution='0.006' -mixing='markov_0_KPP_reflect' -grazing='full' -system='gemini' -bg_mixing='tidal' -diatom_death='NEMO_detritus' -no_advection='True'
+python3 regional_Kooi+NEMO_3D.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0_KPP_ceiling_tides' -system='gemini' -bg_mixing='no' -diatom_death='NEMO' -no_advection='True'

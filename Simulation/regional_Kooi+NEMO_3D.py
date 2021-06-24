@@ -75,7 +75,10 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     tpp0 = particle.tpp3              # [mmol N m-3 d-1]
     mu_n0 = tpp0*wt_N                 # conversion from [mmol N m-3 d-1] to [mg N m-3 d-1] (atomic weight of 1 mol of N = 14.007 g)
     mu_n = mu_n0/med_N2cell           # conversion from [mg N m-3 d-1] to [no. m-3 d-1]
-    mu_n2 = mu_n/aa                   # conversion from [no. m-3 d-1] to [d-1]
+    if aa>0:                          # If there are any ambient algae
+        mu_n2 = mu_n/aa               # conversion from [no. m-3 d-1] to [d-1]
+    else:
+        mu_n2 = 0.
 
     if mu_n2<0.:
         mu_aa = 0.
@@ -185,6 +188,190 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     particle.r_tot = r_tot
     particle.delta_rho = delta_rho
     particle.t_bf = t_bf          
+
+def MEDUSA_detritus_full_grazing(particle,fieldset,time):
+    """
+    Kernel to compute the vertical velocity (Vs) of particles due to changes in ambient algal concentrations, growth and death of attached algae based on Kooi et al. 2017 model
+    """
+    # ------ Constants and algal properties -----
+    g = fieldset.G            # gravitational acceleration [m s-2]
+    k = fieldset.K            # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
+    rho_fr = fieldset.Rho_fr  # frustule density [g m-3]
+    rho_cy = fieldset.Rho_cy  # cytoplasm density [g m-3]
+    v_a = fieldset.V_a        # Volume of 1 algal cell [m-3]
+    a_diss = fieldset.Diss    # dissolution rate [s-1]
+    r20 = fieldset.R20        # respiration rate [s-1]
+    q10 = fieldset.Q10        # temperature coefficient respiration [-]
+    gamma = fieldset.Gamma    # shear [s-1]
+
+    # ------ Profiles from MEDUSA or Kooi theoretical profiles -----
+    z = particle.depth  # [m]
+    t = particle.temp  # [oC]
+    sw_visc = particle.sw_visc  # [kg m-1 s-1]
+    kin_visc = particle.kin_visc  # [m2 s-1]
+    rho_sw = particle.density  # [kg m-3]
+    a = particle.a  # [no. m-2]
+    a_dead = particle.a_dead
+    vs = particle.vs  # [m s-1]
+
+    #------ Nitrogen to cell ratios for ambient algal concentrations ('aa') and algal growth ('mu_aa') from NEMO output (no longer using N:C:AA (Redfield ratio), directly N:AA from Menden-Deuer and Lessard 2000)
+    med_N2cell = 356.04e-09 # [mgN cell-1] median value is used below (as done in Kooi et al. 2017)
+    wt_N = fieldset.Wt_N    # atomic weight of 1 mol of N = 14.007 g
+    wt_Si = fieldset.Wt_Si  # atomic weight of 1 mol of Si = 28.0855 g
+
+    #------ Ambient algal concentration from MEDUSA's non-diatom + diatom phytoplankton
+    n0 = particle.nd_phy+particle.d_phy # [mmol N m-3] total plankton concentration engaging in primary production in MEDUSA
+    d0 = particle.d_phy                 # [mmol N m-3] diatom concentration that attaches to plastic particles
+
+    n = n0*wt_N                         # conversion from [mmol N m-3] to [mg N m-3]
+    d = d0*wt_N                         # conversion from [mmol N m-3] to [mg N m-3]
+
+    n2 = n/med_N2cell                   # conversion from [mg N m-3] to [no. m-3]
+    d2 = d/med_N2cell                   # conversion from [mg N m-3] to [no. m-3]
+
+    if n2<0.:
+        aa = 0.
+    else:
+        aa = n2                        # [no m-3] ambient algae - to compare to Kooi model
+    ad = d2                            # [no m-3] ambient diatoms
+
+    #------ Primary productivity (algal growth) from MEDUSA TPP3 (no longer condition of only above euphotic zone, since not much diff in results)
+    tpp0 = particle.tpp3              # [mmol N m-3 d-1]
+    mu_n0 = tpp0*wt_N                 # conversion from [mmol N m-3 d-1] to [mg N m-3 d-1] (atomic weight of 1 mol of N = 14.007 g)
+    mu_n = mu_n0/med_N2cell           # conversion from [mg N m-3 d-1] to [no. m-3 d-1]
+    if aa>0:
+        mu_n2 = mu_n/aa                   # conversion from [no. m-3 d-1] to [d-1]
+    else:
+        mu_n2=0.
+
+    if mu_n2<0.:
+        mu_aa = 0.
+    elif mu_n2>1.85:
+        mu_aa = 1.85/86400.           # maximum growth rate
+    else:
+        mu_aa = mu_n2/86400.          # conversion from d-1 to s-1
+
+    #------ Grazing -----
+    # Based on equations 54 and 55 in Yool et al. 2013
+    FPn = fieldset.pmPn * math.pow(particle.nd_phy,2)         # (mmol N m-3)**2 Interest in available non-diatoms
+    FPd = fieldset.pmPd * math.pow(particle.d_phy,2)          # (mmol N m-3)**2 Interest in available diatoms
+    FZmu = fieldset.pmZmu * math.pow(particle.mic_zoo,2)      # (mmol N m-3)**2 Interest in available microzooplankton
+    FD = fieldset.pmD * math.pow(particle.detr,2)             # (mmol N m-3)**2 Interest in available detritus
+    Fm = FPn + FPd + FZmu + FD                                # (mmol N m-3)**2 Interest in total available food
+
+    GmPd = (fieldset.Gm * fieldset.pmPd * math.pow(particle.d_phy,2) * particle.mes_zoo)/(fieldset.km + Fm)  # [mmol N m-3 s-1]
+
+    gr0 = GmPd
+    gr1 = gr0*wt_N              # conversion to [mg N m-3 s-1]
+    gr_n = gr1/med_N2cell       # conversion to [no. m-3 s-1]
+    if ad>0:
+        gr_ad = gr_n/ad             # conversion to [s-1]
+    else:
+        gr_ad = 0.
+
+    #------ Non-linear losses ------
+    a_nlin0 = fieldset.mu2*particle.d_phy*particle.d_phy/(fieldset.kPd+particle.d_phy)  # ambient diatom non-linear losses [mmol N m-3 s-1]
+    a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
+    a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
+    if ad>0:
+        a_nlin = a_nlin_n/ad                            # conversion to [s-1]
+    else:
+        a_nlin = 0.
+
+    #------ N:Si ratio density ------
+    R_Si_N = particle.d_si/particle.d_phy  # [(mmol N)-1 (mmol Si)]
+
+    particle.Si_N = R_Si_N
+
+    rho_bf = fieldset.Rho_bf
+    particle.rho_bf = rho_bf
+
+    #------ Volumes -----
+    v_pl = (4./3.)*math.pi*particle.r_pl**3.             # volume of plastic [m3]
+    theta_pl = 4.*math.pi*particle.r_pl**2.              # surface area of plastic particle [m2]
+    r_a = ((3./4.)*(v_a/math.pi))**(1./3.)               # radius of an algal cell [m]
+
+    v_bfa = (v_a*a)*theta_pl                              # volume of living biofilm [m3]
+
+    v_cy = (4./3.)*math.pi*(r_a*50./60.)**3               # volume of cytoplasm [m3] of a single algal cell ~59/60 Miklasz & Denny 2010
+    v_fr = v_a-v_cy                                       # volume of the frustule [m3] of a single algal cell ~1/60
+
+    v_bfd = (v_fr*a_dead)*theta_pl                         # volume of dead biofilm [m3]
+    v_tot = v_bfa + v_bfd + v_pl                           # volume of total [m3]
+    t_bf = ((v_tot*(3./(4.*math.pi)))**(1./3.))-particle.r_pl  # biofilm thickness [m]
+
+    #------ Diffusivity -----
+    r_tot = particle.r_pl + t_bf                              # total radius [m]
+    rho_tot = (v_pl * particle.rho_pl + v_bfa*rho_bf + v_bfd*rho_fr)/v_tot # total density [kg m-3] dead cells = frustule
+    theta_tot = 4.*math.pi*r_tot**2.                          # surface area of total [m2]
+    d_pl = k * (t + 273.16)/(6. * math.pi * sw_visc * r_tot)  # diffusivity of plastic particle [m2 s-1]
+    d_a = k * (t + 273.16)/(6. * math.pi * sw_visc * r_a)     # diffusivity of algal cells [m2 s-1]
+
+    #------ Encounter rates -----
+    beta_abrown = 4.*math.pi*(d_pl + d_a)*(r_tot + r_a)       # Brownian motion [m3 s-1]
+    beta_ashear = 1.3*gamma*((r_tot + r_a)**3.)               # advective shear [m3 s-1]
+    beta_aset = (1./2.)*math.pi*r_tot**2. * abs(vs)           # differential settling [m3 s-1]
+    beta_a = beta_abrown + beta_ashear + beta_aset            # collision rate [m3 s-1]
+
+    #------ Attached algal growth (Eq. 11 in Kooi et al. 2017) -----
+    a_coll = (beta_a*ad)/theta_pl*fieldset.collision_eff      # [no. m-2 s-1] collisions with diatoms
+    a_growth = mu_aa*a                                        # [no. m-2 s-1]
+
+    a_grazing = gr_ad*a                                       # grazing losses [no. m-2 s-1]
+    a_linear = fieldset.mu1*a                                 # linear losses [no. m-2 s-1] eq 67 Yool et al. 2013
+    a_non_linear = a_nlin*a                                   # non-linear losses [no. m-2 s-1] eq 72 Yool et al. 2013
+    a_resp = (q10**((t-20.)/10.))*r20*a                       # [no. m-2 s-1] respiration
+
+    particle.a_coll = a_coll
+    particle.a_growth = a_growth
+    particle.a_gr = a_grazing
+    particle.a_l = a_linear
+    particle.a_nl = a_non_linear
+    particle.a_resp = a_resp
+    particle.a += (a_coll + a_growth - a_grazing - a_resp - a_non_linear) * particle.dt
+
+    a_diss = a_diss*a_dead                     # [no. m-2 s-1]
+    a_indirect = fieldset.D3*a_grazing         # [no. m-2 s-1]
+    a_direct = fieldset.D1*a_non_linear        # [no. m-2 s-1]
+    particle.a_direct = a_direct
+    particle.a_indirect = a_indirect
+    particle.a_diss = a_diss
+
+    particle.a_dead += (a_direct + a_indirect - a_diss) * particle.dt # From eq. 90 Yool et al. 2013
+
+    dn = 2. * (r_tot)                             # equivalent spherical diameter [m]
+    delta_rho = (rho_tot - rho_sw)/rho_sw         # normalised difference in density between total plastic+bf and seawater[-]
+   
+    dstar = ((rho_tot - rho_sw) * g * dn**3.)/(rho_sw * kin_visc**2.) # [-]
+
+    if dstar > 5e9:
+        w = 1000.
+    elif dstar <0.05:
+        w = (dstar**2.) *1.71E-4
+    else:
+        w = 10.**(-3.76715 + (1.92944*math.log10(dstar)) - (0.09815*math.log10(dstar)**2.) - (0.00575*math.log10(dstar)**3.) + (0.00056*math.log10(dstar)**4.))
+
+    #------ Settling of particle -----
+    if delta_rho > 0: # sinks
+        vs = (g * kin_visc * w * delta_rho)**(1./3.)
+    else: #rises
+        a_del_rho = delta_rho*-1.
+        vs = -1.*(g * kin_visc * w * a_del_rho)**(1./3.)  # m s-1
+
+    particle.vs_init = vs
+
+    z0 = z + vs * particle.dt
+    if z0 <=0.6: # NEMO's 'surface depth'
+        vs = 0
+        particle.depth = 0.6
+    elif z0 > 0:
+        particle.depth += vs * particle.dt
+
+    particle.vs = vs
+    particle.rho_tot = rho_tot
+    particle.r_tot = r_tot
+    particle.delta_rho = delta_rho
+    particle.t_bf = t_bf
 
 def AdvectionRK4_3D_vert(particle, fieldset, time):
     """Advection of particles using fourth-order Runge-Kutta integration including vertical velocity.
@@ -439,6 +626,9 @@ class plastic_particle(JITParticle): #ScipyParticle): #
     a_gr = Variable('a_gr', dtype=np.float32, to_write=True)
     a_l = Variable('a_l', dtype=np.float32, to_write=True)
     a_nl = Variable('a_nl', dtype=np.float32, to_write=True)
+    a_direct = Variable('a_direct', dtype=np.float32, to_write=True)
+    a_indirect = Variable('a_indirect', dtype=np.float32, to_write=True)
+    a_diss = Variable('a_diss', dtype=np.float32, to_write=True)
     kin_visc = Variable('kin_visc',dtype=np.float32,to_write=False)
     sw_visc = Variable('sw_visc',dtype=np.float32,to_write=False)
     vs = Variable('vs',dtype=np.float32,to_write=True)
@@ -472,6 +662,7 @@ if __name__ == "__main__":
                    help='start year for the run')
     p.add_argument('-region', choices = ('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-mixing', choices = ('no', 'fixed', 'markov_0_KPP_reflect', 'markov_0_KPP_ceiling_tides'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
+    p.add_argument('-biofouling', choices=('MEDUSA', 'MEDUSA_detritus'), action='store', dest = 'biofouling')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     p.add_argument('-bg_mixing', choices=('no', 'tidal'), action='store', dest = 'bg_mixing')
     p.add_argument('-no_biofouling', choices =('True','False'), action="store", dest="no_biofouling", help='True if using Kooi kernel without biofouling')   
@@ -482,6 +673,7 @@ if __name__ == "__main__":
     yr = args.yr
     region = args.region
     mixing = args.mixing
+    biofouling = args.biofouling
     no_biofouling = False #no_biofouling = args.no_biofouling
     no_advection = str(args.no_advection)
     system = args.system
@@ -503,8 +695,8 @@ if __name__ == "__main__":
     elif region == 'EqPac' and no_advection == 'False':
         minlat = -40 
         maxlat = 40
-        minlon = 110
-        maxlon = -100
+        minlon = 100
+        maxlon = -90
     elif region == 'EqPac':
         minlat = -5
         maxlat = 5
@@ -513,8 +705,8 @@ if __name__ == "__main__":
     elif region == 'SO' and no_advection == 'False':
         minlat = -75
         maxlat = -25
-        minlon = -40
-        maxlon = 70
+        minlon = 90
+        maxlon = 60
     elif region == 'SO':
         minlat= -63
         maxlat = -52
@@ -700,6 +892,7 @@ if __name__ == "__main__":
     fieldset.add_constant('Wt_Si', 28.0855)                  # Si atomic weight
     fieldset.add_constant('R_N_Si_min', 0.2)                 # Minimum N:Si ratio
     fieldset.add_constant('R_N_Si_max', 5.)                  # Maximum N:Si ratio
+    fieldset.add_constant('Diss', 0.006/86400.)              # Dissolution rate [d-1] -> [s-1]
     fieldset.add_constant('Gm', 0.5/86400.)                  # Maximum zooplankton grazing rate [s-1]
     fieldset.add_constant('km', 0.3)                         # Zooplankton grazing half-saturation constant [mmol N m-3]
     fieldset.add_constant('pmPn', 0.15)                      # Mesozooplankton grazing preference for non-diatoms
@@ -790,10 +983,13 @@ if __name__ == "__main__":
     elif mixing == 'markov_0_KPP_ceiling_tides':
         kernels += pset.Kernel(markov_0_KPP_ceiling_tides)
 
-    kernels += pset.Kernel(MEDUSA_full_grazing)
+    if biofouling == 'MEDUSA':
+        kernels += pset.Kernel(MEDUSA_full_grazing)
+    elif biofouling == 'MEDUSA_detritus':
+        kernels += pset.Kernel(MEDUSA_detritus_full_grazing)
 
     if system == 'cartesius':
-        outfile = '/scratch-local/rfischer/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'NEMO_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+        outfile = '/scratch-local/rfischer/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
         outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'NEMO_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 

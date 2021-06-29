@@ -99,13 +99,19 @@ def MEDUSA_full_grazing(particle,fieldset,time):
     gr0 = GmPd
     gr1 = gr0*wt_N            # conversion to [mg N m-3 s-1]
     gr_n = gr1/med_N2cell     # conversion to [no. m-3 s-1]
-    gr_ad = gr_n/ad           # conversion to [s-1]
+    if ad >0.:
+        gr_ad = gr_n/ad           # conversion to [s-1]
+    else:
+        gr_ad = 0.
 
     #------ Non-linear losses ------
     a_nlin0 = fieldset.mu2*particle.d_phy*particle.d_phy/(fieldset.kPd+particle.d_phy)  # ambient diatom non-linear losses [mmol N m-3 s-1]
     a_nlin1 = a_nlin*wt_N                           # conversion to [mg N m-3 s-1]
     a_nlin_n = a_nlin1/med_N2cell                   # conversion to [no. m-3 s-1]
-    a_nlin = a_nlin_n/ad                            # conversion to [s-1]
+    if ad>0.:
+        a_nlin = a_nlin_n/ad                            # conversion to [s-1]
+    else:
+        a_nlin = 0.
 
     #------ N:Si ratio density ------
     R_Si_N = particle.d_si/particle.d_phy  # [(mmol N) (mmol Si)-1]

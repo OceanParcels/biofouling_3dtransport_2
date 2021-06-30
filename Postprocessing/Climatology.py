@@ -1,9 +1,17 @@
 import numpy as np
 from glob import glob
 import xarray as xr
+from argparse import ArgumentParser
+import warnings
+warnings.filterwarnings("ignore")
 
 # compute climatology for one region
-region = 'SO'
+
+p = ArgumentParser()
+p.add_argument('-region', choices=('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
+args = p.parse_args()
+region = args.region
+
 yr = '2004'
 dirread_NEMO = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/means/'
 dirread_bgc_NEMO = '/data/oceanparcels/input_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'
@@ -51,7 +59,7 @@ lats = {'NPSG': lat_release_NPSG,
         'SO': lat_release_SO}
 
 iy_min, ix_min = getclosest_ij(mesh_mask['nav_lat'], mesh_mask['nav_lon'], lats[region][0,0], lons[region][0,0])
-iy_max, ix_max = getclosest_ij(mesh_mask['nav_lat'], mesh_mask['nav_lon'], lats[region][0,-1], lon[region][0,-1])
+iy_max, ix_max = getclosest_ij(mesh_mask['nav_lat'], mesh_mask['nav_lon'], lats[region][0,-1], lons[region][0,-1])
 
 D_region = ds_p_NEMO['PHD'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
 PP_region = ds_pp_NEMO['TPP3'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
@@ -206,7 +214,7 @@ kpp_region[Z_region>mld_region] = 0
 RHO_profile = RHO_region.mean('time_counter').mean('y').mean('x')
 RHO_profile = np.nan_to_num(RHO_profile)
 
-kpp_profile = np.mean(kpp_EqPac, axis=(0,1,2))
+kpp_profile = np.mean(kpp_region, axis=(0,1,2))
 
 climatology = np.array([D_profile, PP_profile, kpp_profile])
-np.save(region+'_climatology', climatology)
+np.save('/data/oceanparcels/output_data/data_Reint/'+region+'_climatology', climatology)

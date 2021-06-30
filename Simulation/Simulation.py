@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 #------ Choose ------:
-simdays = 458
+simdays = 10
 secsdt = 60
 hrsoutdt = 12
 
@@ -325,7 +325,7 @@ if __name__ == "__main__":
         proc = 'bfadv'
         kernels += pset.Kernel(AdvectionRK4_3D)
 
-    kernels += + pset.Kernel(periodicBC)
+    kernels += pset.Kernel(periodicBC)
 
     if mixing == 'markov_0':
         kernels += pset.Kernel(markov_0_mixing)

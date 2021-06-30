@@ -180,29 +180,24 @@ if __name__ == "__main__":
 
     indices = {'lat': range(iy_min, iy_max), 'lon': range(ix_min, ix_max)} #depth : range(0,2000)
 
-    chs_U = {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
-    chs_V = {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
-    chs_W = {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
-    chs_T = {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)}
-
-    chs = {'U': chs_U,
-           'V': chs_V,
-           'W': chs_W,
-           'd_phy': chs_T,
-           'nd_phy': chs_T,
-           'tpp3': chs_T,
-           'cons_temperature': chs_T,
-           'abs_salinity': chs_T,
-           'mldr': chs_T,
-           'taum': chs_T,
-           'w_10': chs_T,
-           'euph_z': chs_T,
-           'mic_zoo': chs_T,
-           'mes_zoo': chs_T,
-           'detr': chs_T,
-           'Di_Si': chs_T}
+    chs = {'U': {'time': ('time_counter', 1), 'depth': ('depthu', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'V': {'time': ('time_counter', 1), 'depth': ('depthv', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'W': {'time': ('time_counter', 1), 'depth': ('depthw', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'nd_phy': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'tpp3': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'cons_temperature': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'abs_salinity': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'mldr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'taum': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'w_10': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat': ('y', 200), 'lon': ('x', 200)},
+           'euph_z': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
+           'mic_zoo': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
+           'mes_zoo': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
+           'detr': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)},
+           'Di_Si': {'time': ('time_counter', 1), 'depth': ('deptht', 25), 'lat':('y', 200), 'lon': ('x', 200)}}
     
-    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, indices = indices) #chunksize=chs,
+    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, indices = indices, chunksize=chs)
 
     variable = ('Kz', 'TIDAL_Kz')
     dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'Depth_midpoint'}

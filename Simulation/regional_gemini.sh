@@ -11,4 +11,4 @@
 
 echo 'Start Simulation'
 cd ${HOME}/biofouling_3dtransport_2/Simulation/
-python3 regional_Kooi+NEMO_3D.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0_KPP_ceiling_tides' -system='gemini' -bg_mixing='no' -diatom_death='NEMO' -no_advection='True'
+python3 Simulation.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0' -system='gemini' -diatom_death='MEDUSA' -no_advection='True'

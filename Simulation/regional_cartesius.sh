@@ -9,5 +9,5 @@
 #SBATCH --mail-type=fail
 #SBATCH --mail-user=r.p.b.fischer@uu.nl
 echo 'Initiating run'
-srun python regional_Kooi+NEMO_3D.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0_KPP_ceiling_tides' -biofouling='MEDUSA' -system='cartesius' -no_advection='True'
+srun python Simulation.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0' -biofouling='MEDUSA' -system='cartesius' -no_advection='True'
 echo 'Finished computation.'

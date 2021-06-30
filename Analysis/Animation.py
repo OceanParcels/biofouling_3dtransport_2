@@ -18,7 +18,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # ----- Number of days -------
-frames = 366 #732 #916
+frames = 729 #916
 
 datadir = '/data/oceanparcels/output_data/data_Reint/'#'/scratch/rfischer/Kooi_data/data_output/'
 regions = {'EqPac': 'Equatorial Pacific',
@@ -30,7 +30,7 @@ r_pl_clist = ['#7a0177','#c51b8a','#f768a1', '#fbb4b9']
 r_pl_cmap = plt.get_cmap('RdPu_r')
 
 
-region = 'EqPac'
+region = 'SO'
 mortality = 0.39              # [d-1]
 runtime = 365                  # [days]
 dt = 600                       # [seconds]
@@ -129,19 +129,19 @@ fig = plt.figure(figsize=(15,15))
 #axcb0 = plt.subplot(gs[0])
 #axcb1 = plt.subplot(gs[2])
 #ax = plt.subplot(gs[1],projection=ccrs.Orthographic(central_longitude=-160))
-ax = plt.axes(projection=ccrs.Orthographic(central_longitude=-160))
+ax = plt.axes(projection=ccrs.Orthographic(central_longitude=-100, central_latitude=-60))
 ax.set_global()
 
 #diatoms_t = f(timerange_ns[0])
 #pc = ax.pcolormesh(mesh_mask['glamf'][0,jmin:jmax,imin:imax],mesh_mask['gphif'][0,jmin:jmax,imin:imax],diatoms_t, cmap='cmo.algae', vmax=0.5, zorder=1, transform=ccrs.PlateCarree())
 ax.set_facecolor('navy')
 ax.coastlines()
-ax.add_feature(cfeature.LAND, color='w',zorder=2)
+ax.add_feature(cfeature.LAND, color='limegreen',zorder=2)
 
 time_id = np.where(np.logical_and(times >= timerange[0],times < timerange[1])) # All trajectory data for a single day
 
 vmax=250
-scatter = ax.scatter(lons[time_id].T,lats[time_id].T, marker='o', s=sqrtsizes*1000, linewidths=0.3, transform=ccrs.PlateCarree(),zorder=4, color='gold')# ,c=depths[time_id].T,cmap='cmo.matter',vmin=0,vmax=vmax)
+scatter = ax.scatter(lons[time_id].T,lats[time_id].T, marker='o', s=sqrtsizes*1000, linewidths=0.3, transform=ccrs.PlateCarree(),zorder=4, color='gold', edgecolor='darkorange')# ,c=depths[time_id].T,cmap='cmo.matter',vmin=0,vmax=vmax)
 
 
 time_text = ax.text(0.83, 0.95,'time',horizontalalignment='left',verticalalignment='top', fontsize=14, bbox={'facecolor':'w', 'alpha':0.7, 'pad':5}, zorder=3, transform=ax.transAxes) # Initialise time ticker
@@ -162,7 +162,7 @@ time_text = ax.text(0.83, 0.95,'time',horizontalalignment='left',verticalalignme
 def animate(i):
     time_id = np.where(np.logical_and(times >= timerange[i],times < timerange[i+1]))
     scatter.set_offsets(np.c_[lons[time_id].T, lats[time_id].T])
-    scatter.set_array(depths[time_id].T)
+    #scatter.set_array(depths[time_id].T)
     
     #diatoms_t = f(timerange_ns[i])
     #pc.set_array(diatoms_t.ravel())

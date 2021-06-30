@@ -202,7 +202,7 @@ if __name__ == "__main__":
            'detr': chs_T,
            'Di_Si': chs_T}
     
-    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, chunksize=chs, indices = indices)
+    fieldset = FieldSet.from_nemo(filenames, variables, dimensions, allow_time_extrapolation=False, indices = indices) #chunksize=chs,
 
     variable = ('Kz', 'TIDAL_Kz')
     dimension = {'lon': 'Longitude', 'lat': 'Latitude', 'depth':'Depth_midpoint'}

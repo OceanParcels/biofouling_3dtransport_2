@@ -124,17 +124,16 @@ f = interp1d(time_ns,diatoms,axis=0)
 
 
 fig = plt.figure(figsize=(15,15))
-#gs = gridspec.GridSpec(1, 3, width_ratios=[1, 30, 1])
+gs = gridspec.GridSpec(1, 3, width_ratios=[1, 30, 1])
 
-#axcb0 = plt.subplot(gs[0])
-#axcb1 = plt.subplot(gs[2])
-#ax = plt.subplot(gs[1],projection=ccrs.Orthographic(central_longitude=-160))
-ax = plt.axes(projection=ccrs.Orthographic(central_longitude=-100, central_latitude=-60))
+axcb0 = plt.subplot(gs[0])
+axcb1 = plt.subplot(gs[2])
+ax = plt.subplot(gs[1],projection=ccrs.Orthographic(central_longitude=-160))
 ax.set_global()
 
-#diatoms_t = f(timerange_ns[0])
-#pc = ax.pcolormesh(mesh_mask['glamf'][0,jmin:jmax,imin:imax],mesh_mask['gphif'][0,jmin:jmax,imin:imax],diatoms_t, cmap='cmo.algae', vmax=0.5, zorder=1, transform=ccrs.PlateCarree())
-ax.set_facecolor('navy')
+diatoms_t = f(timerange_ns[0])
+pc = ax.pcolormesh(mesh_mask['glamf'][0,jmin:jmax,imin:imax],mesh_mask['gphif'][0,jmin:jmax,imin:imax],diatoms_t, cmap='cmo.algae', vmax=0.5, zorder=1, transform=ccrs.PlateCarree())
+# ax.set_facecolor('navy')
 ax.coastlines()
 ax.add_feature(cfeature.LAND, color='limegreen',zorder=2)
 

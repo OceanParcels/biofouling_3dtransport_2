@@ -261,7 +261,7 @@ def markov_0_mixing(particle, fieldset, time):
     rho_sw = particle.density
     mld = fieldset.mldr[time, particle.depth, particle.lat, particle.lon]
     particle.tau = fieldset.taum[time, particle.depth, particle.lat, particle.lon]
-    particle.mld = particle.depth / mld
+    particle.mld = mld
     particle.w10 = fieldset.w_10[time, particle.depth, particle.lat, particle.lon]
 
     # Define KPP profile from tau and mld
@@ -274,14 +274,14 @@ def markov_0_mixing(particle, fieldset, time):
     beta = wave_age * u_s_a / particle.w10
     z0 = 3.5153e-5 * math.pow(beta, -0.42) * math.pow(particle.w10, 2) / g
 
-    if particle.mld < 1:
+    if particle.depth<mld:
         dK_z = alpha_dt * (mld - particle.depth) * (mld - 3 * particle.depth - 2 * z0)
     else:
         dK_z = 0
 
     particle.KPP = alpha * (particle.depth + 0.5 * dK_z * particle.dt + z0) * math.pow(
         1 - (particle.depth + 0.5 * dK_z * particle.dt) / mld, 2)
-    if particle.mld < 1:
+    if particle.depth<mld:
         K_z = particle.KPP
     else:
         K_z = 0.
@@ -310,7 +310,7 @@ def markov_0_mixing(particle, fieldset, time):
     potential = particle.depth + w_m_step
     if potential < 0.6:
         particle.depth = 0.6
-    elif potential > 0:
+    else:
         particle.depth = potential
 
 def AdvectionRK4_1D(particle, fieldset, time):

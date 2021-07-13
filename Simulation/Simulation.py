@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 #------ Choose ------:
-simdays = 10
+simdays = 458
 secsdt = 60
 hrsoutdt = 12
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         dirread_bgc = '/data/oceanparcels/input_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'
         dirread_mesh = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/domain/'
 
-    startdate = np.datetime64('%s-%s-01' % (yr, mon))
+    startdate = np.datetime64(f'{yr}-{mon}-01')
     enddate = startdate + np.timedelta64(simdays+5,'D')
 
     startyear = int(str(startdate)[:4])
@@ -93,28 +93,28 @@ if __name__ == "__main__":
 
     if mon == '01':
         yr0 = str(int(yr) - 1)
-        ufiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '1*d05U.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05U.nc')))
-        vfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '1*d05V.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05V.nc')))
-        wfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '1*d05W.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05W.nc')))
-        pfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr0 + '1*d05P.nc'))+sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '1*d05P.nc')))
-        ppfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr0 + '1*d05D.nc'))+sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '1*d05D.nc')))
-        tsfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '1*d05T.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05T.nc')))
+        ufiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '*d05U.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05U.nc')))
+        vfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '*d05V.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05V.nc')))
+        wfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '*d05W.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05W.nc')))
+        pfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr0 + '*d05P.nc'))+sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '*d05P.nc')))
+        ppfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr0 + '*d05D.nc'))+sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '*d05D.nc')))
+        tsfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr0 + '*d05T.nc'))+sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05T.nc')))
     else:
-        ufiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05U.nc')))
-        vfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05V.nc')))
-        wfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05W.nc')))
-        pfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '1*d05P.nc')))
-        ppfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '1*d05D.nc')))
-        tsfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '1*d05T.nc')))
+        ufiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05U.nc')))
+        vfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05V.nc')))
+        wfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05W.nc')))
+        pfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '*d05P.nc')))
+        ppfiles = (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + yr + '*d05D.nc')))
+        tsfiles = (sorted(glob(dirread + 'ORCA0083-N06_' + yr + '*d05T.nc')))
 
     for i in range(endyear-startyear):
         newyr = str(int(yr)+i+1)
-        ufiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '1*d05U.nc')))
-        vfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '1*d05V.nc')))
-        wfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '1*d05W.nc')))
-        pfiles += (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + newyr + '1*d05P.nc')))
-        ppfiles += (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + newyr + '1*d05D.nc')))
-        tsfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '1*d05T.nc')))
+        ufiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '*d05U.nc')))
+        vfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '*d05V.nc')))
+        wfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '*d05W.nc')))
+        pfiles += (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + newyr + '*d05P.nc')))
+        ppfiles += (sorted(glob(dirread_bgc + 'ORCA0083-N06_' + newyr + '*d05D.nc')))
+        tsfiles += (sorted(glob(dirread + 'ORCA0083-N06_' + newyr + '*d05T.nc')))
 
         
     mesh_mask = dirread_mesh+'coordinates.nc'
@@ -204,14 +204,14 @@ if __name__ == "__main__":
     if system == 'gemini':
         Kz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variable, dimension)
     elif system == 'cartesius':
-        Kz_field = Field.from_netcdf('~/biofouling_3dtransport_2/Preprocessing/Kz.nc', variable, dimension)
+        Kz_field = Field.from_netcdf('/home/dlobelle/biofouling_3dtransport_2/Preprocessing/Kz.nc', variable, dimension)
     fieldset.add_field(Kz_field)
 
     variabled = ('dKzdz', 'TIDAL_dKz')
     if system == 'gemini':
         dKz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variabled, dimension)
     elif system == 'cartesius':
-        dKz_field = Field.from_netcdf('~/biofouling_3dtransport_2/Preprocessing/Kz.nc', variabled, dimension)
+        dKz_field = Field.from_netcdf('/home/dlobelle/biofouling_3dtransport_2/Preprocessing/Kz.nc', variabled, dimension)
     fieldset.add_field(dKz_field)
 
     # ------ Defining constants ------
@@ -329,9 +329,9 @@ if __name__ == "__main__":
         kernels += pset.Kernel(MEDUSA_biofouling)
 
     if system == 'cartesius':
-        outfile = '/scratch-local/rfischer/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+        outfile = '/home/dlobelle/biofouling_3dtransport_2/Simulation/Sim_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/rfischer/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/scratch/dlobelle/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
 

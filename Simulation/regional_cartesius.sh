@@ -7,7 +7,7 @@
 #SBATCH --mail-type=begin
 #SBATCH --mail-type=end
 #SBATCH --mail-type=fail
-#SBATCH --mail-user=r.p.b.fischer@uu.nl
+#SBATCH --mail-user=d.m.a.lobelle@uu.nl
 echo 'Initiating run'
 srun python Simulation.py -mon=10 -yr=2003 -region='NPSG' -mixing='markov_0' -biofouling='MEDUSA' -system='cartesius' -no_advection='True'
 echo 'Finished computation.'

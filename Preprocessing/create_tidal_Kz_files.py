@@ -20,7 +20,7 @@ def create_tidal_Kz_files(file_name: str):
     downloaded at https://www.seanoe.org/data/00619/73082/
     """
     # Loading the global data from de Lavergne et al. (2020)
-    datadir = '/scratch/rfischer/Kooi_data/data_input/'
+    datadir = '/scratch/dlobelle/Kooi_data/data_input/'
     TIDAL_filename = datadir + 'tidal_mixing_3D_maps.nc'
     TIDAL_data = {}
     for key in Dataset(TIDAL_filename).variables.keys():
@@ -71,4 +71,4 @@ def create_tidal_Kz_files(file_name: str):
     dset.to_netcdf(file_name)
 
 if __name__ == "__main__":
-    create_tidal_Kz_files('/scratch/rfischer/Kooi_data/data_input/Kz.nc')
+    create_tidal_Kz_files('/scratch/dlobelle/Kooi_data/data_input/Kz.nc')

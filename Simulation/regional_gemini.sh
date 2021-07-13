@@ -3,7 +3,7 @@
 #$ -S /bin/bash
 #$ -V
 #$ -N regional_SO
-#$ -M r.p.b.fischer@uu.nl
+#$ -M d.m.a.lobelle@uu.nl
 #$ -m e
 #$ -l h_vmem=20G
 #$ -l h_rt=18:00:00

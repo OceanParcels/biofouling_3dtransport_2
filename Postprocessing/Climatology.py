@@ -68,6 +68,7 @@ SAL_region = ds_ts_NEMO['salin'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_m
 TAU_region = ds_ts_NEMO['taum'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
 MLD_region = ds_ts_NEMO['mldr10_1'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
 W10_region = ds_ts_NEMO['sowindsp'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
+EZD_region = ds_pp_NEMO['MED_XZE'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
 
 for i, filename in enumerate(ppfiles_NEMO[1:]):
     ds_0 = xr.open_dataset(filename)
@@ -110,6 +111,12 @@ for i, filename in enumerate(tsfiles_NEMO[1:]):
     SAL_0 = ds_0['salin'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
     print(i)
     SAL_region = xr.concat([SAL_region,SAL_0], 'time_counter')
+    
+for i, filename in enumerate(ppfiles_NEMO[1:]):
+    ds_0 = xr.open_dataset(filename)
+    EZD_0 = ds_0['MED_XZE'].isel(y=slice(iy_min,iy_max),x=slice(ix_min,ix_max))
+    print(i)
+    EZD_region = xr.concat([EZD_region,EZD_0], 'time_counter')
 
 PP_profile = PP_region.mean('time_counter').mean('y').mean('x')
 PP_profile = np.nan_to_num(PP_profile)
@@ -217,4 +224,10 @@ RHO_profile = np.nan_to_num(RHO_profile)
 kpp_profile = np.mean(kpp_region, axis=(0,1,2))
 
 climatology = np.array([D_profile, PP_profile, kpp_profile])
-np.save('/data/oceanparcels/output_data/data_Reint/'+region+'_climatology', climatology)
+np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_climatology', climatology)
+
+MLD_time = MLD_region.mean('y').mean('x')
+np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_MLD', MLD_time)
+
+EZD_time = EZD_region.mean('y').mean('x')
+np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_EZD', EZD_time)

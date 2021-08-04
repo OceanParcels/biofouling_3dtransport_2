@@ -6,7 +6,7 @@ Executable python script to simulate regional biofouling particles with paramete
 
 from parcels import FieldSet, ParticleSet, AdvectionRK4_3D, ErrorCode, ParticleFile, Field
 from parcels.application_kernels.TEOSseawaterdensity import PolyTEOS10_bsq
-from kernels import plastic_particle, MEDUSA_biofouling, markov_0_mixing, profiles, AdvectionRK4_1D
+from kernels import plastic_particle, MEDUSA_biofouling, MEDUSA_detritus, markov_0_mixing, profiles, AdvectionRK4_1D
 from utils import delete_particle, delete_particle_interp, periodicBC, getclosest_ij, uniform_release
 from datetime import timedelta as delta
 import numpy as np
@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 #------ Choose ------:
-simdays = 458
+simdays = 822 #458
 secsdt = 60
 hrsoutdt = 12
 
@@ -29,7 +29,9 @@ if __name__ == "__main__":
                    help='start year for the run')
     p.add_argument('-region', choices = ('NPSG','EqPac','SO'), action = "store", dest = "region", help ='region where particles released')
     p.add_argument('-mixing', choices = ('no', 'markov_0'), action = "store", dest = 'mixing', help='Type of random vertical mixing. "no" is none, "fixed" is mld between 0.2 and -0.2 m/s')
-    p.add_argument('-biofouling', choices=('no', 'MEDUSA'), action='store', dest = 'biofouling')
+    p.add_argument('-biofouling', choices=('MEDUSA_detritus', 'MEDUSA'), action='store', dest = 'biofouling')
+    p.add_argument('-rhobf', choices=('1388', '1170'), action='store', dest = 'rhobf')
+    p.add_argument('-rhopl', choices=('30', '920'), action='store', dest = 'rhopl')
     p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
     p.add_argument('-no_advection', choices =('True','False'), action="store", dest="no_advection", help='True if removing advection_RK43D kernel')
  
@@ -39,6 +41,8 @@ if __name__ == "__main__":
     region = args.region
     mixing = args.mixing
     biofouling = args.biofouling
+    rhopl = args.rhopl
+    rhobf = args.rhobf
     system = args.system
     no_advection = str(args.no_advection)
  
@@ -218,7 +222,7 @@ if __name__ == "__main__":
     fieldset.add_constant('Gr_a', 0.39 / 86400.)
     fieldset.add_constant('collision_eff', 1.)
     fieldset.add_constant('K', 1.0306E-13 / (86400. ** 2.))  # Boltzmann constant [m2 kg d-2 K-1] now [s-2] (=1.3804E-23)
-    fieldset.add_constant('Rho_bf', 1388.)                   # density of biofilm [g m-3]
+    fieldset.add_constant('Rho_bf', int(rhobf)) #1388.)      # density of biofilm [g m-3]
     fieldset.add_constant('Rho_fr', 1800.)                   # density of frustule [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('Rho_cy', 1065.)                   # density of cytoplasm [g m-3] median value from Miklasz & Denny 2010
     fieldset.add_constant('V_a', 2.0E-16)                    # Volume of 1 algal cell [m-3]
@@ -282,7 +286,8 @@ if __name__ == "__main__":
     z_release = np.tile(0.6,[n_res,n_res, n_sizebins*n_particles_per_bin])
     res = '1x1'
 
-    rho_pls = np.tile(920, [n_res, n_res, n_sizebins*n_particles_per_bin])
+    rho_pls = np.tile(int(rhopl), [n_res, n_res, n_sizebins*n_particles_per_bin])
+    rho_bfs = np.tile(int(rhobf), [n_res, n_res, n_sizebins*n_particles_per_bin])
     r_pls = uniform_release(n_locs, n_particles_per_bin, n_sizebins)
 
     pset = ParticleSet.from_list(fieldset=fieldset,         # the fields on which the particles are advected
@@ -290,6 +295,7 @@ if __name__ == "__main__":
                                  lon= lon_release, #-160.,  # a vector of release longitudes 
                                  lat= lat_release, #36., 
                                  time = startdate,
+                                 rho_bf = rho_bfs,
                                  depth = z_release,
                                  r_pl = r_pls,
                                  rho_pl = rho_pls,
@@ -327,11 +333,13 @@ if __name__ == "__main__":
 
     if biofouling == 'MEDUSA':
         kernels += pset.Kernel(MEDUSA_biofouling)
-
+    elif biofouling == 'MEDUSA_detritus':
+        kernels += pset.Kernel(MEDUSA_detritus)
+        
     if system == 'cartesius':
-        outfile = '/home/dlobelle/biofouling_3dtransport_2/Simulation/Sim_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+        outfile = '/home/dlobelle/biofouling_3dtransport_2/Simulation/Sim_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(rhopl))+'rhopl_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
-        outfile = '/scratch/dlobelle/Kooi_data/data_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
+        outfile = '/data/oceanparcels/output_data/data_Delphine/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(rhopl))+'rhopl_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
 

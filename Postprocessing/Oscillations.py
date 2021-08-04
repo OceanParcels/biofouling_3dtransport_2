@@ -9,7 +9,7 @@ p.add_argument('-region', choices=('NPSG','EqPac','SO'), action = "store", dest 
 args = p.parse_args()
 region = args.region
 
-nr_of_trajectories = 50
+nr_of_trajectories = 100
 
 datadir = '/data/oceanparcels/output_data/data_Delphine/' #data_Reint/'
 regions = {'EqPac': 'Equatorial Pacific',
@@ -18,15 +18,15 @@ regions = {'EqPac': 'Equatorial Pacific',
            'NPSG': 'North Pacific Subtropical Gyre'}
 
 mortality = 0.39              # [d-1]
-runtime = 822 #458                 # [days]
+runtime = 458 #822 #                # [days]
 dt = 60                       # [seconds]
 outputdt = 12                  # [hours]
 death = 'MEDUSA'
 grazing = 'full'
 mixing = 'markov_0_'+death #KPP_ceiling_tides_
 diss = 0.006
-rho_p = 920
-rho_bf = 1388
+rho_pl = 920
+rho_bf = 1170 #1388
 rho_fr= 1800
 sizebinedges = [1e-3, 1e-4, 1e-5]
 res = '1x1'
@@ -34,7 +34,7 @@ proc = 'bfnoadv'
 season = 'Oct'
 season_string = {'Jan':'January - July', 'MAM':'March - September', 'JJA':'June - December', 'SON':'September - March','DJF':'December - June', 'Oct': 'October -'}
 
-filename = datadir+'regional_'+region+'_'+proc+'_'+season+'_2002_'+res+'res_'+mixing+'_'+str(rho_bf)+'rhobf_'+str(runtime)+'days_'+str(dt)+'dtsecs_'+str(outputdt)+'hrsoutdt.nc'
+filename = datadir+'regional_'+region+'_'+proc+'_'+season+'_2003_'+res+'res_'+mixing+'_'+str(rho_bf)+'rhobf_'+str(rho_pl)+'rhopl_'+str(runtime)+'days_'+str(dt)+'dtsecs_'+str(outputdt)+'hrsoutdt.nc'
 ds = xr.open_dataset(filename)
 
 radii = np.unique(ds['r_pl'])
@@ -49,7 +49,7 @@ maxrange = len(ds['obs'])*nr_of_trajectories
 for r in range(len(split_ds)):
     timeseries = split_ds[r][1]['z'].values.flatten()[:maxrange]
     mld = split_ds[r][1]['mld'].values.flatten()[:maxrange]
-    mld_bool = mld > 1.15
+    mld_bool = timeseries>mld #> 1.15
 
     osc_ids = []
     for k, g in itertools.groupby(enumerate(mld_bool), lambda x:x[1]):
@@ -72,5 +72,5 @@ for r in range(len(split_ds)):
     osc_stats[r, 6] = np.percentile(np.diff(osc_ids), 99) / (24 / outputdt)
 oscillations[oscillations == -1] = np.nan
 
-np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_oscillations', oscillations)
-np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_oscillation_stats', osc_stats)
+np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_oscillations_rhobf'+str(rho_bf)+'_rhopl'+str(rho_pl), oscillations)
+np.save('/data/oceanparcels/output_data/data_Delphine/'+region+'_oscillation_stats_rhobf'+str(rho_bf)+'_rhopl'+str(rho_pl), osc_stats)

@@ -2,7 +2,7 @@
 # SGE Options
 #$ -S /bin/bash
 #$ -V
-#$ -N regional_SO
+#$ -N EqPac_rhobf1170
 #$ -M d.m.a.lobelle@uu.nl
 #$ -m e
 #$ -l h_vmem=20G
@@ -11,4 +11,4 @@
 
 echo 'Start Simulation'
 cd ${HOME}/biofouling_3dtransport_2/Simulation/
-python3 Simulation.py -mon='10' -yr='2003' -region='SO' -mixing='markov_0' -system='gemini' -biofouling='MEDUSA' -no_advection='True'
+python3 Simulation.py -mon='01' -yr='2004' -region='EqPac' -mixing='markov_0' -system='gemini' -biofouling='MEDUSA' -rhobf='1170' -no_advection='True'

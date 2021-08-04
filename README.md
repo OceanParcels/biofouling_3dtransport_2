@@ -13,4 +13,4 @@ Computation of the individual oscillations from the particle trajectories. Compu
 
 ### Analysis
 Notebooks to explore the simulation. Scripts to create figures.
-  
+Note that numpy version 1.21.0 is needed to run these scripts 

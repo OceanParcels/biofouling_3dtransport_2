@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 #------ Choose ------:
-simdays = 822 #458
+simdays = 458
 secsdt = 60
 hrsoutdt = 12
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     p.add_argument('-biofouling', choices=('MEDUSA_detritus', 'MEDUSA'), action='store', dest = 'biofouling')
     p.add_argument('-rhobf', choices=('1388', '1170'), action='store', dest = 'rhobf')
     p.add_argument('-rhopl', choices=('30', '920'), action='store', dest = 'rhopl')
-    p.add_argument('-system', choices=('gemini', 'cartesius'), action='store', dest = 'system', help='"gemini" or "cartesius"')
+    p.add_argument('-system', choices=('gemini', 'cartesius', 'lorenz'), action='store', dest = 'system', help='"gemini", "lorenz" or "cartesius"')
     p.add_argument('-no_advection', choices =('True','False'), action="store", dest="no_advection", help='True if removing advection_RK43D kernel')
  
     args = p.parse_args()
@@ -88,6 +88,10 @@ if __name__ == "__main__":
         dirread = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/means/'
         dirread_bgc = '/data/oceanparcels/input_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'
         dirread_mesh = '/data/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/domain/'
+    elif system == 'lorenz':
+        dirread = '/storage/shared/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/means/'
+        dirread_bgc = '/storage/shared/oceanparcels/input_data/NEMO-MEDUSA_BGC/ORCA0083-N006/means/'
+        dirread_mesh = '/storage/shared/oceanparcels/input_data/NEMO-MEDUSA/ORCA0083-N006/domain/'
 
     startdate = np.datetime64(f'{yr}-{mon}-01')
     enddate = startdate + np.timedelta64(simdays+5,'D')
@@ -174,7 +178,7 @@ if __name__ == "__main__":
                   'detr': {'lon': 'glamf', 'lat': 'gphif', 'depth': 'depthw','time': 'time_counter'},
                   'Di_Si': {'lon':'glamf', 'lat':'gphif', 'time': 'time_counter'}}
 
-    initialgrid_mask = dirread+'ORCA0083-N06_20070105d05U.nc'
+    initialgrid_mask = dirread+'ORCA0083-N06_20040105d05U.nc'
     mask = xr.open_dataset(initialgrid_mask, decode_times=False)
     Lat, Lon = mask.variables['nav_lat'], mask.variables['nav_lon']
     latvals = Lat[:]; lonvals = Lon[:] # extract lat/lon values to numpy arrays
@@ -209,6 +213,8 @@ if __name__ == "__main__":
         Kz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variable, dimension)
     elif system == 'cartesius':
         Kz_field = Field.from_netcdf('/home/dlobelle/biofouling_3dtransport_2/Preprocessing/Kz.nc', variable, dimension)
+    elif system == 'lorenz':
+        Kz_field = Field.from_netcdf('Kz.nc', variable, dimension)
     fieldset.add_field(Kz_field)
 
     variabled = ('dKzdz', 'TIDAL_dKz')
@@ -216,6 +222,8 @@ if __name__ == "__main__":
         dKz_field = Field.from_netcdf('/scratch/rfischer/Kooi_data/data_input/Kz.nc', variabled, dimension)
     elif system == 'cartesius':
         dKz_field = Field.from_netcdf('/home/dlobelle/biofouling_3dtransport_2/Preprocessing/Kz.nc', variabled, dimension)
+    elif system == 'lorenz':
+        dKz_field = Field.from_netcdf('Kz.nc', variabled, dimension)
     fieldset.add_field(dKz_field)
 
     # ------ Defining constants ------
@@ -340,6 +348,8 @@ if __name__ == "__main__":
         outfile = '/home/dlobelle/biofouling_3dtransport_2/Simulation/Sim_output/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(rhopl))+'rhopl_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
     elif system == 'gemini':
         outfile = '/data/oceanparcels/output_data/data_Delphine/regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(rhopl))+'rhopl_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt' 
+    elif system == 'lorenz':
+        outfile = 'regional_'+region+'_'+proc+'_'+s+'_'+yr+'_'+res+'res_'+mixing+'_'+biofouling+'_'+str(int(fieldset.Rho_bf))+'rhobf_'+str(int(rhopl))+'rhopl_'+str(round(simdays,2))+'days_'+str(secsdt)+'dtsecs_'+str(round(hrsoutdt,2))+'hrsoutdt'
 
     pfile= ParticleFile(outfile, pset, outputdt=delta(hours = hrsoutdt))
 
